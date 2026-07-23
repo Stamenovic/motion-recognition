@@ -1,7 +1,11 @@
 from config import RAW_DATASET_DIR, create_project_directories
 from src.data_loader import load_trials
+from src.feature_extraction import extract_trial_features
 from src.preprocessing import filter_trial_translations
-from src.visualization import plot_raw_vs_filtered_translation_side_by_side
+from src.visualization import (
+    plot_raw_vs_filtered_translation_side_by_side,
+    plot_trial_features,
+)
 
 
 DEFAULT_SEGMENT_NAME = "Left:left"
@@ -34,6 +38,10 @@ def main() -> None:
         segment_name=DEFAULT_SEGMENT_NAME,
         show=True,
     )
+
+    features = extract_trial_features(filtered_trial)
+    print(f"Prikazujem izdvojene karakteristike za {features.trial_name}.")
+    plot_trial_features(features, show=True)
 
 
 if __name__ == "__main__":
