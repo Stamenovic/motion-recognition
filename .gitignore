@@ -32,6 +32,12 @@ models/*.joblib
 results/*.png
 results/*.jpg
 results/*.csv
+results/**/*.png
+results/**/*.jpg
+results/**/*.csv
+
+# Local plotting/cache files
+.matplotlib-cache/
 
 # Raw and processed datasets
 data/raw/*
