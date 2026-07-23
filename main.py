@@ -2,13 +2,16 @@ from config import RAW_DATASET_DIR, create_project_directories
 from src.data_loader import load_trials
 from src.feature_extraction import extract_trial_features
 from src.preprocessing import filter_trial_translations
+from src.temporal_normalization import normalize_trial_features
 from src.visualization import (
+    plot_original_vs_normalized_feature,
     plot_raw_vs_filtered_translation_side_by_side,
     plot_trial_features,
 )
 
 
 DEFAULT_SEGMENT_NAME = "Left:left"
+DEFAULT_NORMALIZATION_SIGNAL = "distance_left_right"
 
 
 def main() -> None:
@@ -42,6 +45,18 @@ def main() -> None:
     features = extract_trial_features(filtered_trial)
     print(f"Prikazujem izdvojene karakteristike za {features.trial_name}.")
     plot_trial_features(features, show=True)
+
+    normalized_features = normalize_trial_features(features, num_samples=101)
+    print(
+        "Prikazujem vremensku normalizaciju za signal "
+        f"{DEFAULT_NORMALIZATION_SIGNAL}."
+    )
+    plot_original_vs_normalized_feature(
+        features=features,
+        normalized_features=normalized_features,
+        signal_name=DEFAULT_NORMALIZATION_SIGNAL,
+        show=True,
+    )
 
 
 if __name__ == "__main__":

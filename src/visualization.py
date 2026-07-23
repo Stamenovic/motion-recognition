@@ -12,6 +12,7 @@ from matplotlib.ticker import AutoMinorLocator, FormatStrFormatter
 
 from .data_types import TrialRecord
 from .feature_extraction import TrialFeatures
+from .temporal_normalization import NormalizedTrialFeatures
 
 
 def _style_axis(axis, y_format: str = "%.1f") -> None:
@@ -199,6 +200,63 @@ def plot_trial_features(
     axes[2].xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
     _style_axis(axes[2])
     axes[2].legend(loc="best")
+
+    fig.tight_layout()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return output_path
+
+
+def plot_original_vs_normalized_feature(
+    features: TrialFeatures,
+    normalized_features: NormalizedTrialFeatures,
+    signal_name: str,
+    output_path: Path | None = None,
+    show: bool = True,
+) -> Path | None:
+    """Plot one feature before and after temporal normalization."""
+    original_signal = features.signals[signal_name]
+    normalized_signal = normalized_features.signals[signal_name]
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 5))
+    fig.suptitle(
+        f"{features.trial_name} | {signal_name} | temporal normalization"
+    )
+
+    axes[0].plot(features.time, original_signal, color="tab:blue")
+    axes[0].set_title(
+        f"Original ({normalized_features.original_num_frames} frames, "
+        f"{normalized_features.original_duration:.2f}s)"
+    )
+    axes[0].set_xlabel("Time [s]")
+    axes[0].set_ylabel("Value")
+    axes[0].xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+    _style_axis(axes[0])
+    _mark_signal_max(axes[0], features.time, original_signal, "tab:blue")
+
+    axes[1].plot(
+        normalized_features.normalized_time * 100.0,
+        normalized_signal,
+        color="tab:green",
+    )
+    axes[1].set_title(f"Normalized ({len(normalized_signal)} samples)")
+    axes[1].set_xlabel("Movement duration [%]")
+    axes[1].set_ylabel("Value")
+    axes[1].xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    _style_axis(axes[1])
+    _mark_signal_max(
+        axes[1],
+        normalized_features.normalized_time * 100.0,
+        normalized_signal,
+        "tab:green",
+    )
 
     fig.tight_layout()
 
