@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 # Folderi sa podacima
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
+RAW_DATASET_DIR = RAW_DATA_DIR / "DP2026"
 INTERIM_DATA_DIR = DATA_DIR / "interim"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
