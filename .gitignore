@@ -1,0 +1,46 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+
+# Generated models
+models/*.pkl
+models/*.joblib
+
+# Generated results
+results/*.png
+results/*.jpg
+results/*.csv
+
+# Raw and processed datasets
+data/raw/*
+data/interim/*
+data/processed/*
+
+# Preserve empty folders
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Logs
+*.log
