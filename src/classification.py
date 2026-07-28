@@ -34,26 +34,42 @@ class ClassificationResult:
 def flatten_normalized_features(
     normalized_features: NormalizedTrialFeatures,
     feature_names: list[str] | None = None,
+    scalar_feature_names: list[str] | None = None,
+    include_scalar_features: bool = True,
 ) -> tuple[np.ndarray, list[str]]:
     """Flatten normalized feature signals into one SVM input vector."""
     names = feature_names or sorted(normalized_features.signals)
-    vector = np.concatenate([normalized_features.signals[name] for name in names])
+    signal_vector = np.concatenate([normalized_features.signals[name] for name in names])
+    vector_parts = [signal_vector]
     expanded_names = [
         f"{name}[{sample_idx:03d}]"
         for name in names
         for sample_idx in range(len(normalized_features.signals[name]))
     ]
+
+    if include_scalar_features:
+        scalar_names = scalar_feature_names or sorted(normalized_features.scalar_features)
+        scalar_vector = np.array(
+            [normalized_features.scalar_features[name] for name in scalar_names],
+            dtype=float,
+        )
+        vector_parts.append(scalar_vector)
+        expanded_names.extend(scalar_names)
+
+    vector = np.concatenate(vector_parts)
     return vector, expanded_names
 
 
 def build_normalized_dataset(
     normalized_trials: list[NormalizedTrialFeatures],
+    include_scalar_features: bool = True,
 ) -> ClassificationDataset:
-    """Build X/y arrays from temporally normalized trial features."""
+    """Build X/y arrays from temporally normalized signal features."""
     if not normalized_trials:
         raise ValueError("No normalized trials provided.")
 
     signal_names = sorted(normalized_trials[0].signals)
+    scalar_feature_names = sorted(normalized_trials[0].scalar_features)
     rows = []
     labels = []
     trial_names = []
@@ -62,6 +78,8 @@ def build_normalized_dataset(
         vector, expanded_names = flatten_normalized_features(
             trial_features,
             feature_names=signal_names,
+            scalar_feature_names=scalar_feature_names,
+            include_scalar_features=include_scalar_features,
         )
         rows.append(vector)
         labels.append(trial_features.label)
@@ -72,6 +90,32 @@ def build_normalized_dataset(
         y=np.array(labels),
         trial_names=trial_names,
         feature_names=expanded_names,
+    )
+
+
+def build_scalar_feature_dataset(
+    normalized_trials: list[NormalizedTrialFeatures],
+    scalar_feature_names: list[str] | None = None,
+) -> ClassificationDataset:
+    """Build X/y arrays using only scalar trend features."""
+    if not normalized_trials:
+        raise ValueError("No normalized trials provided.")
+
+    names = scalar_feature_names or sorted(normalized_trials[0].scalar_features)
+    rows = []
+    labels = []
+    trial_names = []
+
+    for trial_features in normalized_trials:
+        rows.append([trial_features.scalar_features[name] for name in names])
+        labels.append(trial_features.label)
+        trial_names.append(trial_features.trial_name)
+
+    return ClassificationDataset(
+        X=np.array(rows, dtype=float),
+        y=np.array(labels),
+        trial_names=trial_names,
+        feature_names=names,
     )
 
 

@@ -316,6 +316,45 @@ def plot_confusion_matrix(
     return output_path
 
 
+def plot_model_accuracy_comparison(
+    results: dict[str, ClassificationResult],
+    output_path: Path | None = None,
+    show: bool = True,
+) -> Path | None:
+    """Plot accuracy values for several classification models."""
+    model_names = list(results)
+    accuracies = [results[name].accuracy for name in model_names]
+
+    fig, axis = plt.subplots(figsize=(9, 5))
+    bars = axis.bar(model_names, accuracies, color=["tab:blue", "tab:green", "tab:orange"])
+    axis.set_title("SVM Leave-One-Out model comparison")
+    axis.set_ylabel("Accuracy")
+    axis.set_ylim(0.0, 1.05)
+    _style_axis(axis, y_format="%.2f")
+
+    for bar, accuracy in zip(bars, accuracies):
+        axis.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            accuracy,
+            f"{accuracy:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+        )
+
+    fig.tight_layout()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return output_path
+
+
 def plot_normalized_trial_comparison(
     normalized_trials: list[NormalizedTrialFeatures],
     output_path: Path | None = None,
@@ -372,6 +411,65 @@ def plot_normalized_trial_comparison(
     for axis in axes[-1, :]:
         axis.set_xlabel("Movement duration [%]")
 
+    fig.tight_layout()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return output_path
+
+
+def plot_scalar_feature_comparison(
+    normalized_trials: list[NormalizedTrialFeatures],
+    scalar_feature_names: list[str],
+    output_path: Path | None = None,
+    show: bool = True,
+) -> Path | None:
+    """Plot scalar trend features for several normalized trials."""
+    if not normalized_trials:
+        raise ValueError("At least one normalized trial is required for comparison.")
+
+    trial_labels = [
+        f"{item.trial_name}\n{item.label}"
+        for item in normalized_trials
+    ]
+    x_positions = range(len(trial_labels))
+
+    fig, axes = plt.subplots(
+        len(scalar_feature_names),
+        1,
+        figsize=(10, 2.8 * len(scalar_feature_names)),
+        sharex=True,
+        squeeze=False,
+    )
+    fig.suptitle("Distance left-right trend feature comparison")
+
+    for row_idx, feature_name in enumerate(scalar_feature_names):
+        axis = axes[row_idx, 0]
+        values = [
+            item.scalar_features[feature_name]
+            for item in normalized_trials
+        ]
+        bars = axis.bar(x_positions, values, color=["tab:blue", "tab:green", "tab:red"])
+        axis.set_ylabel(feature_name.replace("distance_left_right_", ""))
+        _style_axis(axis)
+
+        for bar, value in zip(bars, values):
+            axis.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                bar.get_height(),
+                f"{value:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+
+    axes[-1, 0].set_xticks(list(x_positions), trial_labels)
     fig.tight_layout()
 
     if output_path is not None:
