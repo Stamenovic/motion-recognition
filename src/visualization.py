@@ -10,6 +10,7 @@ os.environ.setdefault(
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator, FormatStrFormatter
 
+from .classification import ClassificationResult
 from .data_types import TrialRecord
 from .feature_extraction import TrialFeatures
 from .temporal_normalization import NormalizedTrialFeatures
@@ -257,6 +258,119 @@ def plot_original_vs_normalized_feature(
         normalized_signal,
         "tab:green",
     )
+
+    fig.tight_layout()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return output_path
+
+
+def plot_confusion_matrix(
+    result: ClassificationResult,
+    output_path: Path | None = None,
+    show: bool = True,
+) -> Path | None:
+    """Plot a confusion matrix for a classification result."""
+    fig, axis = plt.subplots(figsize=(6, 5))
+    image = axis.imshow(result.confusion, cmap="Blues")
+    fig.colorbar(image, ax=axis)
+
+    axis.set_title(f"SVM Leave-One-Out | accuracy={result.accuracy:.3f}")
+    axis.set_xlabel("Predicted label")
+    axis.set_ylabel("True label")
+    axis.set_xticks(range(len(result.labels)), result.labels)
+    axis.set_yticks(range(len(result.labels)), result.labels)
+
+    max_value = result.confusion.max() if result.confusion.size else 0
+    for row_idx in range(result.confusion.shape[0]):
+        for col_idx in range(result.confusion.shape[1]):
+            value = result.confusion[row_idx, col_idx]
+            text_color = "white" if value > max_value / 2 else "black"
+            axis.text(
+                col_idx,
+                row_idx,
+                str(value),
+                ha="center",
+                va="center",
+                color=text_color,
+                fontsize=12,
+            )
+
+    fig.tight_layout()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return output_path
+
+
+def plot_normalized_trial_comparison(
+    normalized_trials: list[NormalizedTrialFeatures],
+    output_path: Path | None = None,
+    show: bool = True,
+) -> Path | None:
+    """Plot normalized distance/speed/acceleration features for several trials."""
+    if not normalized_trials:
+        raise ValueError("At least one normalized trial is required for comparison.")
+
+    feature_groups = [
+        (
+            "Distances [mm]",
+            [
+                "distance_left_right",
+                "distance_left_trunk",
+                "distance_right_trunk",
+            ],
+        ),
+        ("Speeds [mm/s]", ["speed_left", "speed_right"]),
+        ("Accelerations [mm/s^2]", ["acceleration_left", "acceleration_right"]),
+    ]
+
+    fig, axes = plt.subplots(
+        len(feature_groups),
+        len(normalized_trials),
+        figsize=(6 * len(normalized_trials), 10),
+        sharex=True,
+        squeeze=False,
+    )
+    fig.suptitle("Normalized feature comparison")
+
+    for col_idx, trial_features in enumerate(normalized_trials):
+        x_axis = trial_features.normalized_time * 100.0
+        axes[0, col_idx].set_title(
+            f"{trial_features.trial_name}\nlabel={trial_features.label}"
+        )
+
+        for row_idx, (group_label, signal_names) in enumerate(feature_groups):
+            axis = axes[row_idx, col_idx]
+            for signal_name in signal_names:
+                axis.plot(
+                    x_axis,
+                    trial_features.signals[signal_name],
+                    label=signal_name,
+                    linewidth=1.1,
+                )
+
+            axis.set_ylabel(group_label)
+            axis.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+            _style_axis(axis)
+            if col_idx == len(normalized_trials) - 1:
+                axis.legend(loc="best", fontsize=8)
+
+    for axis in axes[-1, :]:
+        axis.set_xlabel("Movement duration [%]")
 
     fig.tight_layout()
 
