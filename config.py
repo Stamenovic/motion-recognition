@@ -13,6 +13,7 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 # Ostali folderi
 MODELS_DIR = PROJECT_ROOT / "models"
 RESULTS_DIR = PROJECT_ROOT / "results"
+PLOTS_DIR = RESULTS_DIR / "plots"
 
 
 def create_project_directories() -> None:
@@ -24,6 +25,7 @@ def create_project_directories() -> None:
         PROCESSED_DATA_DIR,
         MODELS_DIR,
         RESULTS_DIR,
+        PLOTS_DIR,
     ]
 
     for directory in directories:
