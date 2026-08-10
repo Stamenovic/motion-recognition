@@ -30,9 +30,9 @@ def butterworth_lowpass(
     signal: np.ndarray,
     fps: int,
     cutoff_hz: float = 10.0,
-    order: int = 4,
+    order: int = 2,
 ) -> np.ndarray:
-    """Apply a Butterworth low-pass filter along the time axis."""
+    """Apply a zero-phase Butterworth low-pass filter along the time axis."""
     if cutoff_hz <= 0:
         raise ValueError("cutoff_hz must be positive.")
     nyquist_hz = fps / 2.0
@@ -51,7 +51,7 @@ def filter_segment_translation(
     segment: SegmentTrajectory,
     fps: int,
     cutoff_hz: float = 10.0,
-    order: int = 4,
+    order: int = 2,
 ) -> SegmentTrajectory:
     """Return a copy of a segment with filtered translation data."""
     return SegmentTrajectory(
@@ -64,7 +64,7 @@ def filter_segment_translation(
 def filter_trial_translations(
     trial: TrialRecord,
     cutoff_hz: float = 10.0,
-    order: int = 4,
+    order: int = 2,
 ) -> TrialRecord:
     """Return a copy of a trial with all segment translations low-pass filtered."""
     return replace(
