@@ -13,9 +13,7 @@ This branch prepares the post-capture part of a Vicon live recognition workflow.
 
 ## Current model choice
 
-The primary prediction is `fPCA + linear SVM`.
-
-The fallback/check prediction is `statistical features + linear SVM`.
+The prediction is `fPCA + linear SVM`.
 
 This fits the planned SPACE start/stop workflow because the model receives a
 completed movement segment, not an incomplete frame-by-frame stream.
@@ -105,6 +103,7 @@ Put labelled CSV exports into `data\raw`. File names drive the labels:
 ```text
 Sirenje_01.csv, Siri_ruke_01.csv      -> sirenje
 Guranje_01.csv, Ispruzi_ruke_01.csv   -> guranje
+Podizanje_desna_01.csv                 -> podizanje_desna
 ```
 
 The `data\raw` folder is ignored by git, so these recordings must exist on the
@@ -140,8 +139,8 @@ To reuse an already saved model instead of retraining at startup:
 .\.venv\Scripts\python.exe scripts\evaluate_live_models.py
 ```
 
-This retrains the live-ready model on each Leave-One-Out split and reports both
-the fPCA/SVM and statistical/SVM predictions.
+This retrains the live-ready model on each Leave-One-Out split and reports the
+fPCA/SVM prediction.
 
 ## Simulate a completed live segment
 
@@ -203,6 +202,7 @@ Before using the real Vicon stream, check:
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --movement alternate
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --movement sirenje
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --movement guranje
+.\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --movement podizanje_desna
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --format text
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --drop-rate 0.1
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --noise-mm 2
@@ -214,7 +214,7 @@ Important fake sender options:
 --host          target address; use the capture machine IP across two machines
 --port          target UDP port; must match the server
 --fps           stream frame rate; should match the server and training data
---movement      sirenje, guranje, or alternate
+--movement      sirenje, guranje, podizanje_desna, or alternate
 --move-seconds  duration of the synthetic movement phase
 --rest-seconds  rest window for pressing SPACE
 --drop-rate     probability of omitting one object from a frame

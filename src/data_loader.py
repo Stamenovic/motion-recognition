@@ -1,5 +1,6 @@
 """Load Vicon Nexus CSV trial exports and discover movement trials."""
 import csv
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -8,9 +9,12 @@ from .data_types import SegmentTrajectory, TrialMetadata, TrialRecord
 from .path_parser import parse_trial_path
 
 
+MIN_TRIAL_FRAMES = 2
+
+
 def load_vicon_csv(csv_path: Path) -> tuple[TrialMetadata, dict[str, SegmentTrajectory]]:
     """Parse the Segments section of a Vicon Nexus CSV export."""
-    with open(csv_path, "r", newline="") as f:
+    with open(csv_path, "r", newline="", encoding="utf-8-sig") as f:
         all_rows = list(csv.reader(f))
 
     start_idx = next(
@@ -74,7 +78,17 @@ def load_trials(root: Path) -> list[TrialRecord]:
         if parsed is None:
             continue
 
-        metadata, segments = load_vicon_csv(csv_path)
+        try:
+            metadata, segments = load_vicon_csv(csv_path)
+        except ValueError as exc:
+            warnings.warn(f"Skipping {csv_path}: {exc}", RuntimeWarning)
+            continue
+        if metadata.num_frames < MIN_TRIAL_FRAMES:
+            warnings.warn(
+                f"Skipping {csv_path}: only {metadata.num_frames} frame(s).",
+                RuntimeWarning,
+            )
+            continue
         trials.append(
             TrialRecord(
                 path=csv_path,

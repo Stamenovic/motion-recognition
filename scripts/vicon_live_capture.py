@@ -257,12 +257,7 @@ def finish_segment(buffer, model, segment_index: int, min_frames: int) -> None:
         return
 
     result = model.predict_trial(trial)
-    print(
-        "Prediction: "
-        f"fPCA={result.fpca_prediction}, "
-        f"statistical={result.statistical_prediction}, "
-        f"agree={result.models_agree}"
-    )
+    print(f"Prediction: fPCA={result.fpca_prediction}")
 
 
 def run_probe(sock: socket.socket, fps: int) -> None:

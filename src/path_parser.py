@@ -1,5 +1,6 @@
 """Utilities for extracting trial labels and context from Vicon file paths."""
 from pathlib import Path
+import re
 
 
 LABEL_ALIASES = {
@@ -7,14 +8,25 @@ LABEL_ALIASES = {
     "sirenje": "sirenje",
     "siri_ruke": "sirenje",
     "ispruzi_ruke": "guranje",
+    "podizanje_desna": "podizanje_desna",
 }
 
 
+def _normalize_name_part(value: str) -> str:
+    """Remove common separators so names match with or without underscores."""
+    return re.sub(r"[_\-\s]+", "", value.lower())
+
+
 def parse_label_from_name(file_name: str) -> str | None:
-    """Map a CSV file name such as Guranje_01.csv to a movement label."""
+    """Map CSV names such as Guranje01.csv or Podizanje_desna_01.csv to labels."""
     stem = Path(file_name).stem.lower()
+    normalized_stem = _normalize_name_part(stem)
     for prefix, label in LABEL_ALIASES.items():
-        if stem == prefix or stem.startswith(f"{prefix}_"):
+        normalized_prefix = _normalize_name_part(prefix)
+        suffix = normalized_stem.removeprefix(normalized_prefix)
+        if normalized_stem.startswith(normalized_prefix) and (
+            suffix == "" or suffix[0].isdigit()
+        ):
             return label
     return None
 

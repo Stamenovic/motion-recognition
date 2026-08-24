@@ -138,6 +138,8 @@ def main() -> None:
     output_dir = PLOTS_DIR / "review_diagnostics"
     pair_output_dir = output_dir / "cutoff_pairs"
 
+    # One row of plots: original acceleration_left and all tested Butterworth
+    # cutoff frequencies overlaid for the representative Guranje/Sirenje trials.
     cutoff_feature_path = plot_filter_cutoff_feature_comparison(
         selected_trials,
         signal_name=FEATURE_SIGNAL_NAME,
@@ -146,6 +148,8 @@ def main() -> None:
         output_path=output_dir / "01_butterworth_cutoff_acceleration_comparison.png",
         show=False,
     )
+    # Grid version of the same acceleration_left cutoff check: each row isolates
+    # one cutoff frequency against the original signal.
     cutoff_feature_grid_path = plot_filter_cutoff_feature_grid(
         selected_trials,
         signal_name=FEATURE_SIGNAL_NAME,
@@ -154,6 +158,8 @@ def main() -> None:
         output_path=output_dir / "02_butterworth_cutoff_acceleration_grid.png",
         show=False,
     )
+    # Vertical layout of the cutoff comparison, used when the signals need more
+    # horizontal space than the compact two-column figure provides.
     cutoff_feature_stacked_path = plot_filter_cutoff_feature_stacked(
         selected_trials,
         signal_name=FEATURE_SIGNAL_NAME,
@@ -162,6 +168,8 @@ def main() -> None:
         output_path=output_dir / "03_butterworth_cutoff_acceleration_stacked.png",
         show=False,
     )
+    # Repeat the stacked Butterworth plot for each matching Guranje/Sirenje pair
+    # so every attempt index can be visually compared.
     pair_cutoff_paths = generate_pair_cutoff_plots(
         trials_by_name,
         signal_name=FEATURE_SIGNAL_NAME,
@@ -169,6 +177,7 @@ def main() -> None:
     )
     additional_feature_paths = []
     for signal_name in ADDITIONAL_FEATURE_SIGNAL_NAMES:
+        # The same cutoff diagnostic for extra model signals, currently speed_left.
         additional_feature_paths.append(
             plot_filter_cutoff_feature_stacked(
                 selected_trials,
@@ -179,6 +188,7 @@ def main() -> None:
                 show=False,
             )
         )
+        # Save the extra-signal cutoff plots for all paired attempts too.
         additional_feature_paths.extend(
             generate_pair_cutoff_plots(
                 trials_by_name,
@@ -186,6 +196,8 @@ def main() -> None:
                 output_dir=pair_output_dir,
             )
         )
+    # Raw XYZ translation cutoff comparison for the selected segment, useful for
+    # checking whether filtering changes the underlying marker trajectory.
     cutoff_translation_path = plot_filter_cutoff_translation_comparison(
         selected_trials,
         segment_name=SEGMENT_NAME,
@@ -194,6 +206,8 @@ def main() -> None:
         output_path=output_dir / "04_butterworth_cutoff_translation_comparison.png",
         show=False,
     )
+    # Winter-style residual curve for the selected segment, used to estimate a
+    # reasonable cutoff range from residual-vs-frequency behavior.
     residual_path = plot_winter_residual_translation_analysis(
         selected_trials,
         segment_name=SEGMENT_NAME,
@@ -201,6 +215,7 @@ def main() -> None:
         output_path=output_dir / "05_winter_residual_translation_analysis.png",
         show=False,
     )
+    # The same residual analysis for left hand, right hand and trunk separately.
     winter_segment_paths = generate_winter_residual_plots(
         selected_trials,
         segment_names=WINTER_SEGMENT_NAMES,
@@ -212,6 +227,8 @@ def main() -> None:
         n_components=2,
         standardize_signals=True,
     )
+    # Scatter of the first two fPCA component scores, used to inspect how the
+    # movement classes separate in the reduced feature space.
     fpca_path = plot_fpca_score_scatter(
         fpca_dataset,
         output_path=output_dir / "06_fpca_score_scatter.png",

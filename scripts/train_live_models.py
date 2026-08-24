@@ -21,7 +21,7 @@ FPCA_COMPONENTS = 2
 
 
 def main() -> None:
-    """Train fPCA/SVM and statistical/SVM models for completed live segments."""
+    """Train an fPCA/SVM model for completed live segments."""
     create_project_directories()
     trials = load_trials(RAW_DATA_DIR)
     if not trials:
@@ -40,7 +40,6 @@ def main() -> None:
     print(f"Labels: {model.labels}")
     print(f"fPCA components: {model.fpca_components}")
     print(f"Signals: {model.signal_names}")
-    print(f"Statistical features: {len(model.statistical_feature_names)}")
     print(f"Saved model: {MODEL_PATH}")
 
 

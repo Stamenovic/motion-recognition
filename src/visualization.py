@@ -416,8 +416,12 @@ def plot_fpca_score_scatter(
         raise ValueError("At least two fPCA components are required for scatter plot.")
 
     fig, axis = plt.subplots(figsize=(7, 5.5))
-    colors = {"guranje": "tab:blue", "sirenje": "tab:orange"}
-    markers = {"guranje": "o", "sirenje": "s"}
+    colors = {
+        "guranje": "tab:blue",
+        "podizanje_desna": "tab:green",
+        "sirenje": "tab:orange",
+    }
+    markers = {"guranje": "o", "podizanje_desna": "^", "sirenje": "s"}
 
     for label in sorted(set(dataset.y)):
         mask = dataset.y == label

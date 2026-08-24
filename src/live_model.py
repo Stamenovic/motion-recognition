@@ -11,22 +11,19 @@ from .classification import make_svm_pipeline
 from .data_types import TrialRecord
 from .feature_extraction import extract_trial_features
 from .preprocessing import filter_trial_translations
-from .statistical_features import extract_statistical_features
 from .temporal_normalization import normalize_trial_features
 
 
 @dataclass
 class PredictionResult:
-    """Predictions from the live-ready model pair."""
+    """Prediction from the live-ready fPCA model."""
 
     fpca_prediction: str
-    statistical_prediction: str
-    models_agree: bool
 
 
 @dataclass
 class LiveMotionModel:
-    """Serializable fPCA/SVM and statistical/SVM model bundle."""
+    """Serializable fPCA/SVM model bundle."""
 
     cutoff_hz: float
     filter_order: int
@@ -37,8 +34,6 @@ class LiveMotionModel:
     signal_stds: dict[str, float]
     fpca: FPCA
     fpca_svm: object
-    statistical_feature_names: list[str]
-    statistical_svm: object
     labels: list[str]
 
     def save(self, output_path: Path) -> Path:
@@ -55,14 +50,8 @@ class LiveMotionModel:
     def predict_trial(self, trial: TrialRecord) -> PredictionResult:
         """Predict a completed movement segment."""
         fpca_row = self.trial_to_fpca_row(trial)
-        statistical_row = self.trial_to_statistical_row(trial)
         fpca_prediction = str(self.fpca_svm.predict(fpca_row)[0])
-        statistical_prediction = str(self.statistical_svm.predict(statistical_row)[0])
-        return PredictionResult(
-            fpca_prediction=fpca_prediction,
-            statistical_prediction=statistical_prediction,
-            models_agree=fpca_prediction == statistical_prediction,
-        )
+        return PredictionResult(fpca_prediction=fpca_prediction)
 
     def trial_to_fpca_row(self, trial: TrialRecord) -> np.ndarray:
         """Convert one trial to one fPCA score row."""
@@ -88,21 +77,6 @@ class LiveMotionModel:
         )
         return np.asarray(self.fpca.transform(fd_grid), dtype=float)
 
-    def trial_to_statistical_row(self, trial: TrialRecord) -> np.ndarray:
-        """Convert one trial to one statistical feature row."""
-        filtered = filter_trial_translations(
-            trial,
-            cutoff_hz=self.cutoff_hz,
-            order=self.filter_order,
-        )
-        features = extract_trial_features(filtered)
-        statistical = extract_statistical_features(features)
-        return np.array(
-            [[statistical.values[name] for name in self.statistical_feature_names]],
-            dtype=float,
-        )
-
-
 def train_live_motion_model(
     trials: list[TrialRecord],
     cutoff_hz: float = 10.0,
@@ -110,7 +84,7 @@ def train_live_motion_model(
     normalized_num_samples: int = 101,
     fpca_components: int = 2,
 ) -> LiveMotionModel:
-    """Train fPCA/SVM and statistical/SVM models for completed live segments."""
+    """Train an fPCA/SVM model for completed live segments."""
     if len(trials) < 2:
         raise ValueError("At least two trials are required to train the model.")
 
@@ -141,29 +115,6 @@ def train_live_motion_model(
     fpca_svm = make_svm_pipeline()
     fpca_svm.fit(fpca_scores, labels)
 
-    statistical_trials = [
-        extract_statistical_features(
-            extract_trial_features(
-                filter_trial_translations(
-                    trial,
-                    cutoff_hz=cutoff_hz,
-                    order=filter_order,
-                )
-            )
-        )
-        for trial in trials
-    ]
-    statistical_feature_names = sorted(statistical_trials[0].values)
-    statistical_matrix = np.array(
-        [
-            [trial.values[name] for name in statistical_feature_names]
-            for trial in statistical_trials
-        ],
-        dtype=float,
-    )
-    statistical_svm = make_svm_pipeline()
-    statistical_svm.fit(statistical_matrix, labels)
-
     return LiveMotionModel(
         cutoff_hz=cutoff_hz,
         filter_order=filter_order,
@@ -174,8 +125,6 @@ def train_live_motion_model(
         signal_stds=signal_stds,
         fpca=fpca,
         fpca_svm=fpca_svm,
-        statistical_feature_names=statistical_feature_names,
-        statistical_svm=statistical_svm,
         labels=sorted(str(label) for label in set(labels)),
     )
 

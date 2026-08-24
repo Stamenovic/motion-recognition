@@ -25,7 +25,7 @@ DEFAULT_FPS = 200  # the recorded CSVs in data/raw are 200 Hz
 # Rest pose in millimetres (x = lateral, y = forward, z = up). The geometry
 # below is tuned so the synthetic trials land in the same feature ranges as the
 # recorded CSVs: hand separation 500 mm at rest, ~1490 mm at full sirenje,
-# ~100 mm at full guranje.
+# ~100 mm at full guranje, and right-hand lift for podizanje_desna.
 REST_POSE = {
     "Trup": (0.0, 0.0, 1000.0),
     "Left": (-250.0, 150.0, 1250.0),
@@ -34,9 +34,10 @@ REST_POSE = {
 SPREAD_MM = 495.0  # sirenje: each hand moves outwards
 CLOSE_MM = 200.0  # guranje: the hands converge as they extend
 PUSH_MM = 400.0  # guranje: both hands travel forward
+RIGHT_RAISE_MM = 450.0  # podizanje_desna: the right hand travels upward
 NOISE_MM = 0.5
 
-MOVEMENTS = ("sirenje", "guranje")
+MOVEMENTS = ("sirenje", "guranje", "podizanje_desna")
 
 _HEADER = struct.Struct("<IB")
 _ITEM_HEADER = struct.Struct("<BH")
@@ -113,6 +114,7 @@ def pose_at(movement: str, progress: float, noise_mm: float) -> dict:
     spread = SPREAD_MM * amplitude if movement == "sirenje" else 0.0
     close = CLOSE_MM * amplitude if movement == "guranje" else 0.0
     push = PUSH_MM * amplitude if movement == "guranje" else 0.0
+    right_raise = RIGHT_RAISE_MM * amplitude if movement == "podizanje_desna" else 0.0
 
     left_x, left_y, left_z = REST_POSE["Left"]
     right_x, right_y, right_z = REST_POSE["Right"]
@@ -121,7 +123,7 @@ def pose_at(movement: str, progress: float, noise_mm: float) -> dict:
     pose = {
         "Trup": (trunk_x, trunk_y, trunk_z),
         "Left": (left_x - spread + close, left_y + push, left_z),
-        "Right": (right_x + spread - close, right_y + push, right_z),
+        "Right": (right_x + spread - close, right_y + push, right_z + right_raise),
     }
     if noise_mm <= 0.0:
         return pose

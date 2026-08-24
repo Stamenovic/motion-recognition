@@ -46,8 +46,6 @@ def main() -> None:
     print(f"Trial: {trial.trial_name}")
     print(f"True label: {trial.label}")
     print(f"fPCA + SVM prediction: {result.fpca_prediction}")
-    print(f"Statistical + SVM prediction: {result.statistical_prediction}")
-    print(f"Models agree: {result.models_agree}")
 
 
 if __name__ == "__main__":

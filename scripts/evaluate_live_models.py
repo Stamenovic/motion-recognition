@@ -24,7 +24,6 @@ def main() -> None:
 
     y_true = []
     fpca_predictions = []
-    statistical_predictions = []
     trial_names = []
 
     for train_idx, test_idx in LeaveOneOut().split(np.arange(len(trials))):
@@ -36,20 +35,11 @@ def main() -> None:
         trial_names.append(test_trial.trial_name)
         y_true.append(test_trial.label)
         fpca_predictions.append(result.fpca_prediction)
-        statistical_predictions.append(result.statistical_prediction)
 
     labels = sorted(set(y_true))
     print("Live-ready Leave-One-Out evaluation")
     print()
     _print_result("fPCA + SVM", y_true, fpca_predictions, labels, trial_names)
-    print()
-    _print_result(
-        "Statistical features + SVM",
-        y_true,
-        statistical_predictions,
-        labels,
-        trial_names,
-    )
 
 
 def _print_result(name, y_true, y_pred, labels, trial_names) -> None:
