@@ -1,0 +1,5 @@
+requested_components,actual_components,heldout_accuracy,lazar_accuracy,cumulative_explained_variance
+2,2,1.000000,1.000000,0.538309
+3,3,1.000000,1.000000,0.704687
+4,4,1.000000,1.000000,0.759281
+5,5,1.000000,1.000000,0.799928

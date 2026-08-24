@@ -82,7 +82,7 @@ def train_live_motion_model(
     cutoff_hz: float = 10.0,
     filter_order: int = 2,
     normalized_num_samples: int = 101,
-    fpca_components: int = 2,
+    fpca_components: int = 3,
 ) -> LiveMotionModel:
     """Train an fPCA/SVM model for completed live segments."""
     if len(trials) < 2:
