@@ -18,6 +18,11 @@ The prediction is `fPCA + linear SVM`.
 This fits the planned SPACE start/stop workflow because the model receives a
 completed movement segment, not an incomplete frame-by-frame stream.
 
+The live prediction can also return `Nepoznato`. This is a reject label, not a
+trained movement class. It is used when the best known-class SVM confidence is
+too low or when the captured segment contains too little movement to be treated
+as one of the trained actions.
+
 ## Local test without Vicon
 
 For development outside the lab, run the live server and a fake UDP sender in

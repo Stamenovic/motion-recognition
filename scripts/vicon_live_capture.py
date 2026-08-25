@@ -257,7 +257,15 @@ def finish_segment(buffer, model, segment_index: int, min_frames: int) -> None:
         return
 
     result = model.predict_trial(trial)
-    print(f"Prediction: fPCA={result.fpca_prediction}")
+    print(
+        "Prediction: "
+        f"fPCA={result.fpca_prediction}, "
+        f"candidate={result.known_prediction}, "
+        f"confidence={result.fpca_confidence:.3f}, "
+        f"unknown_threshold={result.unknown_threshold:.3f}, "
+        f"motion={result.motion_extent_mm:.1f} mm, "
+        f"minimum_motion={result.minimum_motion_extent_mm:.1f} mm"
+    )
 
 
 def run_probe(sock: socket.socket, fps: int) -> None:
@@ -290,6 +298,8 @@ def main() -> None:
 
         model = load_or_train_model(args)
         print(f"Model: {args.model_path} (labels: {model.labels})")
+        print(f"Unknown label: {model.unknown_label} (threshold={model.unknown_threshold:.3f})")
+        print(f"Minimum motion for known label: {model.minimum_motion_extent_mm:.1f} mm")
         print(f"Required segments: {list(REQUIRED_SEGMENTS)}")
         print("Press SPACE to start/stop a segment. Press Q or Ctrl+C to quit.")
 

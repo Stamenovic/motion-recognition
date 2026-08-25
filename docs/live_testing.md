@@ -192,8 +192,19 @@ Terminal A prints:
 ```text
 Recording started.
 Segment recorded: 793 frames (3.97 s).
-Prediction: fPCA=sirenje
+Prediction: fPCA=sirenje, candidate=sirenje, confidence=2.237, unknown_threshold=2.004, motion=965.6 mm, minimum_motion=400.0 mm
 ```
+
+If the segment does not look confident enough, or if there is too little
+movement in the captured segment, the final prediction becomes:
+
+```text
+Prediction: fPCA=Nepoznato
+```
+
+`Nepoznato` is not trained as a fourth movement class. It is a reject label used
+when the model should avoid forcing the segment into `guranje`,
+`podizanje_desna`, or `sirenje`.
 
 Press **Q** or Ctrl+C in terminal A to quit.
 
@@ -243,6 +254,11 @@ because the recorded trials end in the extended pose.
 
 Keys: **SPACE** start/stop a segment, **Q** or Ctrl+C to quit.
 
+The live model reports both the final label and the best known-class candidate.
+For example, `fPCA=Nepoznato, candidate=guranje` means the SVM's closest known
+class was `guranje`, but the confidence or movement amount was below the
+accepted threshold.
+
 ---
 
 ## Testing across two machines
@@ -270,6 +286,7 @@ inbound rule for `python.exe`.
 | `Loaded trials:` lower than expected | Some files failed the naming rule | Run the check in Step 3 |
 | `FileNotFoundError: live_motion_model.joblib` | `--use-saved-model` was used before training | Run Step 4 or start without `--use-saved-model` |
 | `Segment discarded: only N frames` | SPACE pressed twice too fast, or no data arriving | Check the sender is running; lower `--min-frames` |
+| Prediction is `Nepoznato` | Low SVM confidence, too little movement, or a movement outside the known classes | Re-record a clean segment; if it is a real target movement, inspect confidence and motion thresholds |
 | Always predicts the same class | Too many rest frames in the segment, or `--fps` does not match the CSVs (200 Hz) | Press SPACE tightly around the movement; check `--fps` on both scripts |
 | Live and simulated predictions disagree | Model is fine, the captured segment is not | Run `simulate_live_prediction.py` on a real trial to confirm the model |
 | `Skipped N incomplete frames` | Frames missing a required object | Expected with `--drop-rate`; with real Vicon it means occlusion |

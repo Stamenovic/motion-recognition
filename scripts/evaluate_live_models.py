@@ -14,7 +14,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".matplotlib-cache"))
 
 from config import RAW_DATA_DIR
 from src.data_loader import load_trials
-from src.live_model import train_live_motion_model
+from src.live_model import UNKNOWN_LABEL, train_live_motion_model
 
 
 def main() -> None:
@@ -36,7 +36,7 @@ def main() -> None:
         y_true.append(test_trial.label)
         fpca_predictions.append(result.fpca_prediction)
 
-    labels = sorted(set(y_true))
+    labels = sorted(set(y_true) | set(fpca_predictions) | {UNKNOWN_LABEL})
     print("Live-ready Leave-One-Out evaluation")
     print()
     _print_result("fPCA + SVM", y_true, fpca_predictions, labels, trial_names)

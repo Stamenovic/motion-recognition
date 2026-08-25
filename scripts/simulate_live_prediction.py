@@ -46,6 +46,11 @@ def main() -> None:
     print(f"Trial: {trial.trial_name}")
     print(f"True label: {trial.label}")
     print(f"fPCA + SVM prediction: {result.fpca_prediction}")
+    print(f"Known-class candidate: {result.known_prediction}")
+    print(f"Confidence: {result.fpca_confidence:.3f}")
+    print(f"Unknown threshold: {result.unknown_threshold:.3f}")
+    print(f"Motion extent: {result.motion_extent_mm:.1f} mm")
+    print(f"Minimum known motion: {result.minimum_motion_extent_mm:.1f} mm")
 
 
 if __name__ == "__main__":

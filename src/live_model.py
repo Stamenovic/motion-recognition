@@ -9,9 +9,22 @@ from skfda.representation.grid import FDataGrid
 
 from .classification import make_svm_pipeline
 from .data_types import TrialRecord
-from .feature_extraction import extract_trial_features
+from .feature_extraction import (
+    LEFT_SEGMENT,
+    RIGHT_SEGMENT,
+    TRUNK_SEGMENT,
+    extract_trial_features,
+)
 from .preprocessing import filter_trial_translations
 from .temporal_normalization import normalize_trial_features
+
+
+UNKNOWN_LABEL = "Nepoznato"
+UNKNOWN_THRESHOLD_QUANTILE = 0.05
+UNKNOWN_THRESHOLD_SCALE = 0.90
+MIN_MOTION_QUANTILE = 0.05
+MIN_MOTION_SCALE = 0.50
+MOTION_SEGMENTS = (LEFT_SEGMENT, RIGHT_SEGMENT, TRUNK_SEGMENT)
 
 
 @dataclass
@@ -19,6 +32,12 @@ class PredictionResult:
     """Prediction from the live-ready fPCA model."""
 
     fpca_prediction: str
+    known_prediction: str
+    fpca_confidence: float
+    unknown_threshold: float
+    motion_extent_mm: float
+    minimum_motion_extent_mm: float
+    is_unknown: bool
 
 
 @dataclass
@@ -34,6 +53,9 @@ class LiveMotionModel:
     signal_stds: dict[str, float]
     fpca: FPCA
     fpca_svm: object
+    unknown_threshold: float
+    minimum_motion_extent_mm: float
+    unknown_label: str
     labels: list[str]
 
     def save(self, output_path: Path) -> Path:
@@ -50,8 +72,23 @@ class LiveMotionModel:
     def predict_trial(self, trial: TrialRecord) -> PredictionResult:
         """Predict a completed movement segment."""
         fpca_row = self.trial_to_fpca_row(trial)
-        fpca_prediction = str(self.fpca_svm.predict(fpca_row)[0])
-        return PredictionResult(fpca_prediction=fpca_prediction)
+        known_prediction = str(self.fpca_svm.predict(fpca_row)[0])
+        confidence = _prediction_confidence(self.fpca_svm, fpca_row)
+        motion_extent = _trial_motion_extent_mm(trial)
+        is_unknown = (
+            confidence < self.unknown_threshold
+            or motion_extent < self.minimum_motion_extent_mm
+        )
+        fpca_prediction = self.unknown_label if is_unknown else known_prediction
+        return PredictionResult(
+            fpca_prediction=fpca_prediction,
+            known_prediction=known_prediction,
+            fpca_confidence=confidence,
+            unknown_threshold=self.unknown_threshold,
+            motion_extent_mm=motion_extent,
+            minimum_motion_extent_mm=self.minimum_motion_extent_mm,
+            is_unknown=is_unknown,
+        )
 
     def trial_to_fpca_row(self, trial: TrialRecord) -> np.ndarray:
         """Convert one trial to one fPCA score row."""
@@ -83,6 +120,7 @@ def train_live_motion_model(
     filter_order: int = 2,
     normalized_num_samples: int = 101,
     fpca_components: int = 3,
+    unknown_label: str = UNKNOWN_LABEL,
 ) -> LiveMotionModel:
     """Train an fPCA/SVM model for completed live segments."""
     if len(trials) < 2:
@@ -114,6 +152,18 @@ def train_live_motion_model(
     labels = np.array([trial.label for trial in trials])
     fpca_svm = make_svm_pipeline()
     fpca_svm.fit(fpca_scores, labels)
+    training_confidences = _prediction_confidences(fpca_svm, fpca_scores)
+    unknown_threshold = float(
+        np.quantile(training_confidences, UNKNOWN_THRESHOLD_QUANTILE)
+        * UNKNOWN_THRESHOLD_SCALE
+    )
+    motion_extents = np.asarray(
+        [_trial_motion_extent_mm(trial) for trial in trials],
+        dtype=float,
+    )
+    minimum_motion_extent_mm = float(
+        np.quantile(motion_extents, MIN_MOTION_QUANTILE) * MIN_MOTION_SCALE
+    )
 
     return LiveMotionModel(
         cutoff_hz=cutoff_hz,
@@ -125,8 +175,38 @@ def train_live_motion_model(
         signal_stds=signal_stds,
         fpca=fpca,
         fpca_svm=fpca_svm,
+        unknown_threshold=unknown_threshold,
+        minimum_motion_extent_mm=minimum_motion_extent_mm,
+        unknown_label=unknown_label,
         labels=sorted(str(label) for label in set(labels)),
     )
+
+
+def _prediction_confidence(model, rows: np.ndarray) -> float:
+    """Return confidence for one row as the best SVM decision score."""
+    return float(_prediction_confidences(model, rows)[0])
+
+
+def _prediction_confidences(model, rows: np.ndarray) -> np.ndarray:
+    """Return one confidence score per row from the SVM decision function."""
+    scores = np.asarray(model.decision_function(rows), dtype=float)
+    if scores.ndim == 1:
+        return np.abs(scores)
+    return np.max(scores, axis=1)
+
+
+def _trial_motion_extent_mm(trial: TrialRecord) -> float:
+    """Return the largest translation range among required movement segments."""
+    extents = []
+    for segment_name in MOTION_SEGMENTS:
+        if segment_name not in trial.segments:
+            continue
+        translation = np.asarray(trial.segments[segment_name].translation, dtype=float)
+        if translation.size == 0 or not np.isfinite(translation).any():
+            continue
+        axis_range = np.nanmax(translation, axis=0) - np.nanmin(translation, axis=0)
+        extents.append(float(np.linalg.norm(axis_range)))
+    return max(extents, default=0.0)
 
 
 def _preprocess_and_normalize_trial(

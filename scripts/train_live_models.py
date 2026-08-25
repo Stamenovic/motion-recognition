@@ -38,6 +38,9 @@ def main() -> None:
 
     print(f"Loaded trials: {len(trials)}")
     print(f"Labels: {model.labels}")
+    print(f"Unknown label: {model.unknown_label}")
+    print(f"Unknown threshold: {model.unknown_threshold:.3f}")
+    print(f"Minimum known motion: {model.minimum_motion_extent_mm:.1f} mm")
     print(f"fPCA components: {model.fpca_components}")
     print(f"Signals: {model.signal_names}")
     print(f"Saved model: {MODEL_PATH}")
