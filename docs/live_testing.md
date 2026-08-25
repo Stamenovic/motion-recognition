@@ -10,20 +10,20 @@ project requirements are installed. The capture server does not: it imports
 level, so it needs numpy, scikit-learn, scikit-fda and joblib in **every** mode,
 including `--probe`.
 
-> **Note on the interpreter path.** `docs/live_pipeline.md` shows
-> `.\.venv\Scripts\python.exe`, but the virtual environment in this repository
-> is `env\`. All commands below use `env\Scripts\python.exe`.
+> **Note on the interpreter path.** The commands below use `env\Scripts\python.exe`
+> because that was the original documented environment name. In the current
+> checkout we have been running `.\.venv\Scripts\python.exe`; use whichever one
+> exists on your machine.
 
 ---
 
 ## Step 1 - install the requirements
 
 ```powershell
-env\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-The `env\` environment currently contains only `pip`, so this is required
-before the capture server will start in any mode.
+This is required before the capture server will start in any mode.
 
 ---
 
@@ -34,13 +34,13 @@ Open **two terminals** in the project root.
 Terminal A, the receiver in probe mode:
 
 ```powershell
-env\Scripts\python.exe scripts\vicon_live_capture.py --probe
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --probe
 ```
 
 Terminal B, the sender:
 
 ```powershell
-env\Scripts\python.exe scripts\fake_vicon_sender.py
+.\.venv\Scripts\python.exe scripts\fake_vicon_sender.py
 ```
 
 Terminal A should print frames like:
@@ -127,7 +127,7 @@ This check needs no installed packages - `src/path_parser.py` imports only
 `pathlib`:
 
 ```powershell
-env\Scripts\python.exe -c "import sys; sys.path.insert(0,'.'); from pathlib import Path; from src.path_parser import parse_label_from_name as f; ps=sorted(Path('data/raw').rglob('*.csv')); print(f'{len(ps)} csv files'); [print(('  OK   ' if f(p.name) else '  SKIP '), p.name, '->', f(p.name)) for p in ps]"
+.\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'.'); from pathlib import Path; from src.path_parser import parse_label_from_name as f; ps=sorted(Path('data/raw').rglob('*.csv')); print(f'{len(ps)} csv files'); [print(('  OK   ' if f(p.name) else '  SKIP '), p.name, '->', f(p.name)) for p in ps]"
 ```
 
 Every file must report `OK`. Any `SKIP` will be ignored by training.
@@ -137,7 +137,7 @@ Every file must report `OK`. Any `SKIP` will be ignored by training.
 ## Step 4 - train
 
 ```powershell
-env\Scripts\python.exe scripts\train_live_models.py
+.\.venv\Scripts\python.exe scripts\train_live_models.py
 ```
 
 This writes `models\live_motion_model.joblib`. The capture server also trains a
@@ -151,20 +151,20 @@ A lower number means some files were skipped by the naming rule above.
 
 ## Step 5 - run the live test
 
-Arrange the two terminals **side by side**. The capture server reads SPACE from
-its own console, so that window must keep keyboard focus, while the sender
-window shows you when to press.
+Arrange the two terminals **side by side**. The capture server now detects
+movement start/stop automatically; it does not need SPACE to mark movement
+start and end.
 
 Terminal A, the capture server:
 
 ```powershell
-env\Scripts\python.exe scripts\vicon_live_capture.py
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py
 ```
 
 Terminal B, the sender:
 
 ```powershell
-env\Scripts\python.exe scripts\fake_vicon_sender.py --movement sirenje
+.\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --movement sirenje
 ```
 
 The sender counts down to each movement:
@@ -172,34 +172,36 @@ The sender counts down to each movement:
 ```text
 [001] rest 2.0s
         MOVE in 2s
-        MOVE in 1s - press SPACE NOW
+        MOVE in 1s
 [001] MOVE sirenje (3.0s)
-[001] done  - press SPACE to stop and classify
+[001] done
 ```
 
-Click on terminal A, then:
-
-1. press **SPACE** on the `press SPACE NOW` line,
-2. wait for `done` to appear in terminal B,
-3. press **SPACE** again.
-
-**Press tightly around the movement.** Rest frames captured before the movement
-get squeezed into the same 101 normalised fPCA samples as the movement itself.
-Enough of them and a `sirenje` segment can be classified as `guranje`.
+Terminal A estimates the shared starting pose from 50 rest frames. It starts
+recording when hand displacement passes 80 mm or hand speed passes 150 mm/s.
+It stops when hand speed stays below 200 mm/s for 30 frames, or when the segment
+reaches 1000 frames. Segments shorter than 280 frames are not classified. After
+classification it clears the buffer and waits through a 100-frame cooldown.
 
 Terminal A prints:
 
 ```text
-Recording started.
-Segment recorded: 793 frames (3.97 s).
-Prediction: fPCA=sirenje, candidate=sirenje, confidence=2.237, unknown_threshold=2.004, motion=965.6 mm, minimum_motion=400.0 mm
+Baseline frames: 50
+Start delta: 80.0 mm
+Start speed: 150.0 mm/s
+Stop speed: 200.0 mm/s
+Stop quiet frames: 30
+Minimum segment frames: 280
+Maximum segment frames: 1000
+Cooldown after segment: 100 complete frame(s)
+Detected movement 1: label=sirenje, frames=335, range=704-1039, candidate=sirenje, confidence=2.247, motion=813.1 mm, reason=quiet
 ```
 
-If the segment does not look confident enough, or if there is too little
-movement in the captured segment, the final prediction becomes:
+If the triggered segment does not look confident enough, or if there is too
+little movement in it, the final prediction becomes:
 
 ```text
-Prediction: fPCA=Nepoznato
+Detected movement 2: label=Nepoznato, frames=280, range=3400-3679, candidate=guranje, confidence=2.225, motion=0.0 mm, reason=quiet
 ```
 
 `Nepoznato` is not trained as a fourth movement class. It is a reject label used
@@ -249,10 +251,17 @@ because the recorded trials end in the extended pose.
 | `--fps` | `200` | Capture rate. **Must match the training CSVs**, which are 200 Hz. |
 | `--model-path` | `models/live_motion_model.joblib` | Where the trained model bundle is saved or loaded from. |
 | `--use-saved-model` | off | Load `--model-path` instead of retraining from `data\raw` at startup. |
-| `--min-frames` | `10` | Segments shorter than this are discarded. |
+| `--baseline-frames` | `50` | Rest frames used to estimate the starting pose. |
+| `--start-delta-mm` | `80` | Start recording when hand displacement from baseline exceeds this. |
+| `--start-speed-mm-s` | `150` | Start recording when hand speed exceeds this. |
+| `--stop-speed-mm-s` | `200` | Count a recording frame as quiet when hand speed is below this. |
+| `--stop-quiet-frames` | `30` | Stop recording after this many quiet frames. |
+| `--min-frames` | `280` | Do not classify triggered segments shorter than this. |
+| `--max-segment-frames` | `1000` | Force classification when a segment reaches this length. |
+| `--cooldown-frames` | `100` | Ignore this many complete frames after a segment is classified. |
 | `--probe` | off | Print parsed frames, do not load the model. |
 
-Keys: **SPACE** start/stop a segment, **Q** or Ctrl+C to quit.
+Keys: **Q** or Ctrl+C to quit. SPACE is ignored in trigger mode.
 
 The live model reports both the final label and the best known-class candidate.
 For example, `fPCA=Nepoznato, candidate=guranje` means the SVM's closest known
@@ -266,7 +275,7 @@ accepted threshold.
 Run the sender on one machine and the server on the other:
 
 ```powershell
-env\Scripts\python.exe scripts\fake_vicon_sender.py --host 192.168.1.50
+.\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --host 192.168.1.50
 ```
 
 The server binds `0.0.0.0` by default, so it accepts remote packets. Allow
@@ -285,12 +294,11 @@ inbound rule for `python.exe`.
 | `No labeled CSV trials found` | Every file failed the naming rule | Run the check in Step 3 |
 | `Loaded trials:` lower than expected | Some files failed the naming rule | Run the check in Step 3 |
 | `FileNotFoundError: live_motion_model.joblib` | `--use-saved-model` was used before training | Run Step 4 or start without `--use-saved-model` |
-| `Segment discarded: only N frames` | SPACE pressed twice too fast, or no data arriving | Check the sender is running; lower `--min-frames` |
-| Prediction is `Nepoznato` | Low SVM confidence, too little movement, or a movement outside the known classes | Re-record a clean segment; if it is a real target movement, inspect confidence and motion thresholds |
-| Always predicts the same class | Too many rest frames in the segment, or `--fps` does not match the CSVs (200 Hz) | Press SPACE tightly around the movement; check `--fps` on both scripts |
+| No detected movement yet | Baseline is still forming, trigger thresholds are not crossed, or packets are incomplete | Check the sender is running; use `--probe` to inspect incoming frames |
+| Prediction is `Nepoznato` | Low SVM confidence, too little movement, or a movement outside the known classes | Inspect confidence, motion thresholds, and whether the window contains the movement |
+| Always predicts the same class | Segment boundaries are poor, or `--fps` does not match the CSVs (200 Hz) | Tune trigger thresholds and check `--fps` on both scripts |
 | Live and simulated predictions disagree | Model is fine, the captured segment is not | Run `simulate_live_prediction.py` on a real trial to confirm the model |
 | `Skipped N incomplete frames` | Frames missing a required object | Expected with `--drop-rate`; with real Vicon it means occlusion |
-| SPACE does nothing | Server window lacks focus | Click the server terminal first |
 | `OSError: address already in use` | An old server is still bound | Close the other terminal, or use a different `--port` |
 
 ---
@@ -301,7 +309,7 @@ Nothing in `vicon_live_capture.py` is specific to the fake sender. Once Nexus
 streams to the same port, point it at the capture machine and confirm with:
 
 ```powershell
-env\Scripts\python.exe scripts\vicon_live_capture.py --probe --port 51001
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --probe --port 51001
 ```
 
 Two things to verify against the real stream:

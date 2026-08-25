@@ -1,17 +1,19 @@
-"""UDP server that records Vicon Nexus frames and classifies movements.
+"""UDP server that detects and classifies live Vicon Nexus movement segments.
 
 Runtime flow:
 
 1. listen for UDP packets streamed by Vicon Nexus,
 2. parse each packet into per-object translations,
-3. SPACE starts/stops a segment buffer,
-4. convert the finished buffer to a TrialRecord,
-5. classify it with the persisted live model.
+3. estimate the shared starting pose from recent rest frames,
+4. start recording when hand displacement or speed passes the trigger threshold,
+5. stop when movement is quiet long enough, or when the segment reaches max size,
+6. classify the completed segment once, then clear the buffer and cooldown.
 
 Only this file talks to the network and the keyboard. Everything downstream
 reuses the same modules the offline training pipeline uses.
 """
 import argparse
+import math
 import os
 import socket
 import struct
@@ -42,7 +44,14 @@ REQUIRED_SEGMENTS = (LEFT_SEGMENT, RIGHT_SEGMENT, TRUNK_SEGMENT)
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 51001
 DEFAULT_FPS = 200  # must match the training CSVs in data/raw, which are 200 Hz
-DEFAULT_MIN_FRAMES = 10
+DEFAULT_MIN_FRAMES = 280
+DEFAULT_COOLDOWN_FRAMES = 100
+DEFAULT_BASELINE_FRAMES = 50
+DEFAULT_START_DELTA_MM = 80.0
+DEFAULT_START_SPEED_MM_S = 150.0
+DEFAULT_STOP_SPEED_MM_S = 200.0
+DEFAULT_STOP_QUIET_FRAMES = 30
+DEFAULT_MAX_SEGMENT_FRAMES = 1000
 
 # Vicon streams bare object names; the trained model expects the CSV export
 # names ("Subject:Segment"). Adjust the left side to match your Nexus objects.
@@ -79,7 +88,49 @@ def parse_args() -> argparse.Namespace:
         "--min-frames",
         type=int,
         default=DEFAULT_MIN_FRAMES,
-        help="Reject segments shorter than this many frames.",
+        help="Do not classify triggered segments shorter than this many frames.",
+    )
+    parser.add_argument(
+        "--cooldown-frames",
+        type=int,
+        default=DEFAULT_COOLDOWN_FRAMES,
+        help="Ignore this many complete frames after a segment is classified.",
+    )
+    parser.add_argument(
+        "--baseline-frames",
+        type=int,
+        default=DEFAULT_BASELINE_FRAMES,
+        help="Recent rest frames used to estimate the shared starting pose.",
+    )
+    parser.add_argument(
+        "--start-delta-mm",
+        type=float,
+        default=DEFAULT_START_DELTA_MM,
+        help="Start recording when hand displacement from baseline exceeds this.",
+    )
+    parser.add_argument(
+        "--start-speed-mm-s",
+        type=float,
+        default=DEFAULT_START_SPEED_MM_S,
+        help="Start recording when hand speed exceeds this.",
+    )
+    parser.add_argument(
+        "--stop-speed-mm-s",
+        type=float,
+        default=DEFAULT_STOP_SPEED_MM_S,
+        help="Count a recording frame as quiet when hand speed is below this.",
+    )
+    parser.add_argument(
+        "--stop-quiet-frames",
+        type=int,
+        default=DEFAULT_STOP_QUIET_FRAMES,
+        help="Stop recording after this many quiet frames.",
+    )
+    parser.add_argument(
+        "--max-segment-frames",
+        type=int,
+        default=DEFAULT_MAX_SEGMENT_FRAMES,
+        help="Force classification when the active segment reaches this length.",
     )
     parser.add_argument(
         "--probe",
@@ -243,28 +294,77 @@ def space_was_pressed() -> tuple[bool, bool]:
     return pressed, quit_requested
 
 
-def finish_segment(buffer, model, segment_index: int, min_frames: int) -> None:
-    """Convert the buffered frames to a TrialRecord and classify them."""
+def classify_segment(buffer, model, event_index: int, min_frames: int):
+    """Convert the triggered buffer to a TrialRecord and classify it."""
     frame_count = len(buffer.frames)
     if frame_count < min_frames:
-        print(f"Segment discarded: only {frame_count} frames (minimum {min_frames}).")
-        return
+        return None
 
-    trial = buffer.to_trial_record(trial_name=f"live_segment_{segment_index:03d}")
-    print(f"Segment recorded: {frame_count} frames ({frame_count / buffer.fps:.2f} s).")
-
-    if model is None:
-        return
-
+    trial = buffer.to_trial_record(trial_name=f"live_segment_{event_index:06d}")
     result = model.predict_trial(trial)
+    return trial, result
+
+
+def _translation(frame: LiveFrame, segment_name: str) -> tuple[float, float, float]:
+    """Return one segment translation from a live frame."""
+    return frame.translations[segment_name]
+
+
+def _mean_translation(
+    frames: list[LiveFrame],
+    segment_name: str,
+) -> tuple[float, float, float]:
+    """Return the mean translation for one segment over baseline frames."""
+    values = [_translation(frame, segment_name) for frame in frames]
+    return tuple(sum(axis_values) / len(values) for axis_values in zip(*values))
+
+
+def _fit_baseline(frames: list[LiveFrame]) -> dict[str, tuple[float, float, float]]:
+    """Estimate the shared starting pose from recent rest frames."""
+    return {
+        segment_name: _mean_translation(frames, segment_name)
+        for segment_name in REQUIRED_SEGMENTS
+    }
+
+
+def _max_hand_delta_from_baseline(
+    frame: LiveFrame,
+    baseline: dict[str, tuple[float, float, float]],
+) -> float:
+    """Return the larger left/right hand displacement from baseline."""
+    return max(
+        math.dist(_translation(frame, LEFT_SEGMENT), baseline[LEFT_SEGMENT]),
+        math.dist(_translation(frame, RIGHT_SEGMENT), baseline[RIGHT_SEGMENT]),
+    )
+
+
+def _max_hand_speed(
+    previous_frame: LiveFrame | None,
+    frame: LiveFrame,
+    fps: int,
+) -> float:
+    """Return the larger left/right hand speed in mm/s."""
+    if previous_frame is None:
+        return 0.0
+    return max(
+        math.dist(_translation(frame, LEFT_SEGMENT), _translation(previous_frame, LEFT_SEGMENT))
+        * fps,
+        math.dist(_translation(frame, RIGHT_SEGMENT), _translation(previous_frame, RIGHT_SEGMENT))
+        * fps,
+    )
+
+
+def print_segment_prediction(event_index: int, trial, result, reason: str) -> None:
+    """Print one classified triggered segment."""
     print(
-        "Prediction: "
-        f"fPCA={result.fpca_prediction}, "
+        f"Detected movement {event_index}: "
+        f"label={result.fpca_prediction}, "
+        f"frames={trial.metadata.num_frames}, "
+        f"range={trial.metadata.frame_start}-{trial.metadata.frame_end}, "
         f"candidate={result.known_prediction}, "
         f"confidence={result.fpca_confidence:.3f}, "
-        f"unknown_threshold={result.unknown_threshold:.3f}, "
         f"motion={result.motion_extent_mm:.1f} mm, "
-        f"minimum_motion={result.minimum_motion_extent_mm:.1f} mm"
+        f"reason={reason}"
     )
 
 
@@ -285,8 +385,16 @@ def main() -> None:
     """Run the UDP capture server."""
     args = parse_args()
 
-    if msvcrt is None and not args.probe:
-        raise RuntimeError("SPACE segmentation requires Windows (msvcrt).")
+    if args.min_frames < 2:
+        raise ValueError("--min-frames must be at least 2.")
+    if args.cooldown_frames < 0:
+        raise ValueError("--cooldown-frames cannot be negative.")
+    if args.baseline_frames < 1:
+        raise ValueError("--baseline-frames must be at least 1.")
+    if args.stop_quiet_frames < 1:
+        raise ValueError("--stop-quiet-frames must be at least 1.")
+    if args.max_segment_frames < args.min_frames:
+        raise ValueError("--max-segment-frames must be greater than or equal to --min-frames.")
 
     sock = open_socket(args.host, args.port)
     print(f"Listening for Vicon UDP on {args.host}:{args.port} at {args.fps} fps.")
@@ -301,45 +409,111 @@ def main() -> None:
         print(f"Unknown label: {model.unknown_label} (threshold={model.unknown_threshold:.3f})")
         print(f"Minimum motion for known label: {model.minimum_motion_extent_mm:.1f} mm")
         print(f"Required segments: {list(REQUIRED_SEGMENTS)}")
-        print("Press SPACE to start/stop a segment. Press Q or Ctrl+C to quit.")
+        print(f"Baseline frames: {args.baseline_frames}")
+        print(f"Start delta: {args.start_delta_mm:.1f} mm")
+        print(f"Start speed: {args.start_speed_mm_s:.1f} mm/s")
+        print(f"Stop speed: {args.stop_speed_mm_s:.1f} mm/s")
+        print(f"Stop quiet frames: {args.stop_quiet_frames}")
+        print(f"Minimum segment frames: {args.min_frames}")
+        print(f"Maximum segment frames: {args.max_segment_frames}")
+        print(f"Cooldown after segment: {args.cooldown_frames} complete frame(s)")
+        print("Press Q or Ctrl+C to quit.")
 
         buffer = LiveSegmentBuffer(fps=args.fps, required_segments=REQUIRED_SEGMENTS)
-        recording = False
-        segment_index = 1
+        event_index = 1
         last_frame_number = -1
         skipped_frames = 0
+        cooldown_frames_remaining = 0
+        baseline_frames: list[LiveFrame] = []
+        previous_frame = None
+        quiet_count = 0
+        recording = False
 
         while True:
             pressed, quit_requested = space_was_pressed()
             if quit_requested:
                 break
             if pressed:
-                if not recording:
-                    buffer.clear()
-                    recording = True
-                    skipped_frames = 0
-                    print("Recording started.")
-                else:
-                    recording = False
-                    if skipped_frames:
-                        print(f"Skipped {skipped_frames} incomplete frames.")
-                    finish_segment(buffer, model, segment_index, args.min_frames)
-                    segment_index += 1
+                print("SPACE is ignored in trigger mode. Press Q to quit.")
 
             for frame in read_pending_frames(sock, args.fps, last_frame_number + 1):
                 if frame.frame_number == last_frame_number:
                     continue
                 last_frame_number = frame.frame_number
-                if not recording:
-                    continue
                 if any(name not in frame.translations for name in REQUIRED_SEGMENTS):
                     skipped_frames += 1
                     continue
+                speed = _max_hand_speed(previous_frame, frame, args.fps)
+                previous_frame = frame
+                if cooldown_frames_remaining:
+                    cooldown_frames_remaining -= 1
+                    continue
+
+                if not recording:
+                    baseline_frames.append(frame)
+                    if len(baseline_frames) > args.baseline_frames:
+                        baseline_frames = baseline_frames[-args.baseline_frames:]
+                    if len(baseline_frames) < args.baseline_frames:
+                        continue
+
+                    baseline = _fit_baseline(baseline_frames)
+                    hand_delta = _max_hand_delta_from_baseline(frame, baseline)
+                    if (
+                        hand_delta < args.start_delta_mm
+                        and speed < args.start_speed_mm_s
+                    ):
+                        continue
+
+                    recording = True
+                    buffer.clear()
+                    buffer.append(frame)
+                    quiet_count = 0
+                    continue
+
                 buffer.append(frame)
+                if speed <= args.stop_speed_mm_s:
+                    quiet_count += 1
+                else:
+                    quiet_count = 0
+
+                quiet_stop = (
+                    len(buffer.frames) >= args.min_frames
+                    and quiet_count >= args.stop_quiet_frames
+                )
+                forced_stop = len(buffer.frames) >= args.max_segment_frames
+                if quiet_stop:
+                    stop_reason = "quiet"
+                elif forced_stop:
+                    stop_reason = "max"
+                else:
+                    continue
+
+                classified = classify_segment(
+                    buffer,
+                    model,
+                    event_index,
+                    args.min_frames,
+                )
+                if classified is None:
+                    recording = False
+                    buffer.clear()
+                    baseline_frames = []
+                    quiet_count = 0
+                    continue
+                trial, result = classified
+                print_segment_prediction(event_index, trial, result, stop_reason)
+                event_index += 1
+                buffer.clear()
+                baseline_frames = []
+                quiet_count = 0
+                recording = False
+                cooldown_frames_remaining = args.cooldown_frames
     except KeyboardInterrupt:
         pass
     finally:
         sock.close()
+        if skipped_frames:
+            print(f"Skipped {skipped_frames} incomplete frames.")
         print("Stopped.")
 
 

@@ -8,7 +8,7 @@ Uses only the Python standard library, so it runs before the project
 requirements are installed.
 
 The stream alternates between a rest pose and a movement. Each phase change is
-printed, so you know when to press SPACE in the capture server.
+printed so you can compare sender timing with rolling-window predictions.
 """
 import argparse
 import math
@@ -65,8 +65,7 @@ def parse_args() -> argparse.Namespace:
         "--rest-seconds",
         type=float,
         default=2.0,
-        help="Rest time between movements. Press SPACE on the last countdown "
-        "tick - rest frames recorded before the movement dilute every feature.",
+        help="Rest time between movements.",
     )
     parser.add_argument(
         "--cycles",
@@ -191,8 +190,7 @@ def main() -> None:
             for index in range(rest_frames):
                 remaining = rest_frames - index
                 if remaining % args.fps == 0:
-                    print(f"        MOVE in {remaining // args.fps}s"
-                          f"{' - press SPACE NOW' if remaining == args.fps else ''}")
+                    print(f"        MOVE in {remaining // args.fps}s")
                 pose = pose_at(movement, None, args.noise_mm)
                 sock.sendto(encode(frame_number, apply_drop(pose, args.drop_rate)), target)
                 frame_number += 1
@@ -207,7 +205,7 @@ def main() -> None:
                 next_send += 1.0 / args.fps
                 _sleep_until(next_send)
 
-            print(f"[{cycle:03d}] done  - press SPACE to stop and classify")
+            print(f"[{cycle:03d}] done")
             print()
     except KeyboardInterrupt:
         pass

@@ -5,18 +5,20 @@ This branch prepares the post-capture part of a Vicon live recognition workflow.
 ## Runtime idea
 
 1. Vicon streams segment translations continuously.
-2. First SPACE press starts recording a movement segment.
-3. Second SPACE press stops recording.
-4. The buffered frames are converted to a `TrialRecord`.
+2. The server estimates the shared starting pose from recent rest frames.
+3. Recording starts when hand displacement or hand speed crosses the trigger threshold.
+4. The triggered segment is converted to a `TrialRecord`.
 5. The same preprocessing used during training is applied.
-6. The saved model predicts the movement label.
+6. The segment is classified once when movement becomes quiet or reaches max length.
+7. After classification, the buffer is cleared and the server waits through cooldown.
 
 ## Current model choice
 
 The prediction is `fPCA + linear SVM`.
 
-This fits the planned SPACE start/stop workflow because the model receives a
-completed movement segment, not an incomplete frame-by-frame stream.
+The live server now uses automatic trigger segmentation instead of manual SPACE
+segmentation. That means it waits for the shared starting pose, detects movement
+start/stop, then classifies the completed segment.
 
 The live prediction can also return `Nepoznato`. This is a reject label, not a
 trained movement class. It is used when the best known-class SVM confidence is
@@ -29,8 +31,8 @@ For development outside the lab, run the live server and a fake UDP sender in
 two terminals. The fake sender streams synthetic `Left`, `Right`, and `Trup`
 poses in the same format expected by `scripts/vicon_live_capture.py`.
 
-Use `env\Scripts\python.exe` instead of `.\.venv\Scripts\python.exe` if that is
-the virtual environment name on your machine.
+Use the Python executable from the virtual environment that exists on your
+machine. The examples below use `.\.venv\Scripts\python.exe`.
 
 ### 1. Check that packets are received
 
@@ -63,8 +65,8 @@ Terminal B:
 .\.venv\Scripts\python.exe scripts\fake_vicon_sender.py --movement sirenje --rest-seconds 5
 ```
 
-Press SPACE in the server terminal during the rest cue to start recording, wait
-for the movement to finish, then press SPACE again to classify the segment.
+The server does not need SPACE. It starts printing detected movements
+automatically after it sees enough motion from the starting pose.
 Repeat with:
 
 ```powershell
@@ -86,8 +88,8 @@ Terminal B:
 .\.venv\Scripts\python.exe scripts\replay_csv_sender.py --trial Sirenje_01 --cycles 1
 ```
 
-This sends the selected CSV trial through the same UDP parser and SPACE
-segmentation path as the Vicon stream.
+This sends the selected CSV trial through the same UDP parser and trigger-based
+prediction path as the Vicon stream.
 
 If the same trial name appears in multiple folders, use the exact CSV path:
 
@@ -170,7 +172,14 @@ Useful options:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --host 0.0.0.0 --port 51001 --fps 200
-.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --min-frames 10
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --baseline-frames 50
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --start-delta-mm 80
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --start-speed-mm-s 150
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --stop-speed-mm-s 200
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --stop-quiet-frames 30
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --min-frames 280
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --max-segment-frames 1000
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --cooldown-frames 100
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --probe
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --use-saved-model
 ```
@@ -183,8 +192,7 @@ Right:right
 Trup:trup
 ```
 
-Each recorded segment is then converted to `TrialRecord` through
-`LiveSegmentBuffer`.
+Each triggered segment is converted to `TrialRecord` through `LiveSegmentBuffer`.
 
 Before using the real Vicon stream, check:
 
@@ -221,7 +229,7 @@ Important fake sender options:
 --fps           stream frame rate; should match the server and training data
 --movement      sirenje, guranje, podizanje_desna, or alternate
 --move-seconds  duration of the synthetic movement phase
---rest-seconds  rest window for pressing SPACE
+--rest-seconds  rest time between synthetic movements
 --drop-rate     probability of omitting one object from a frame
 --noise-mm      position noise in millimetres
 ```

@@ -180,7 +180,7 @@ def main() -> None:
             if args.cycles and cycle > args.cycles:
                 break
 
-            print(f"[{cycle:03d}] rest {args.rest_seconds:.1f}s - press SPACE to start")
+            print(f"[{cycle:03d}] rest {args.rest_seconds:.1f}s")
             for _ in range(rest_frames):
                 send_pose(sock, target, frame_number, rest_pose)
                 frame_number += 1
@@ -194,7 +194,7 @@ def main() -> None:
                 next_send += 1.0 / fps
                 sleep_until(next_send)
 
-            print(f"[{cycle:03d}] done - press SPACE to stop and classify")
+            print(f"[{cycle:03d}] done")
             print()
             for _ in range(rest_frames):
                 send_pose(sock, target, frame_number, rest_pose)
