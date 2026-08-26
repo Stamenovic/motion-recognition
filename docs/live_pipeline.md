@@ -9,12 +9,20 @@ This branch prepares the post-capture part of a Vicon live recognition workflow.
 3. Recording starts when hand displacement or hand speed crosses the trigger threshold.
 4. The triggered segment is converted to a `TrialRecord`.
 5. The same preprocessing used during training is applied.
-6. The segment is classified once when movement becomes quiet or reaches max length.
-7. After classification, the buffer is cleared and the server waits through cooldown.
+6. The completed segment is padded with its final value if it is shorter than
+   the fixed fPCA length, or truncated if it is longer.
+7. The segment is classified once when movement becomes quiet or reaches max length.
+8. After classification, the buffer is cleared and the server waits through cooldown.
 
 ## Current model choice
 
 The prediction is `fPCA + linear SVM`.
+
+On this branch, the live fPCA input is not time-normalized. A completed
+movement keeps its original frame spacing and is only padded or truncated to a
+fixed number of samples so that fPCA can receive equal-length rows. If
+`--fixed-num-samples` is not passed during training, that fixed length is the
+longest valid recording in the training set.
 
 The live server now uses automatic trigger segmentation instead of manual SPACE
 segmentation. That means it waits for the shared starting pose, detects movement
@@ -179,6 +187,7 @@ Useful options:
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --stop-quiet-frames 30
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --min-frames 280
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --max-segment-frames 1000
+.\.venv\Scripts\python.exe scripts\vicon_live_capture.py --fixed-num-samples 1000
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --cooldown-frames 100
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --probe
 .\.venv\Scripts\python.exe scripts\vicon_live_capture.py --use-saved-model
@@ -193,6 +202,11 @@ Trup:trup
 ```
 
 Each triggered segment is converted to `TrialRecord` through `LiveSegmentBuffer`.
+
+If `--fixed-num-samples` is omitted while training at startup, the model uses
+the longest valid training recording as the fPCA length. Padding is therefore
+not decided during the active stream; it happens only after the trigger logic
+has already closed a movement segment.
 
 Before using the real Vicon stream, check:
 

@@ -148,6 +148,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Include baseline frames before the trigger in the classified segment.",
     )
+    parser.add_argument(
+        "--fixed-num-samples",
+        type=int,
+        default=None,
+        help=(
+            "Samples used by padded fPCA after padding/truncation. "
+            "Defaults to the longest valid training recording."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -404,7 +413,10 @@ def main() -> None:
     args = parse_args()
     paths = args.trial_path if args.trial_path else DEFAULT_TRIAL_PATHS
     all_trials, selected_trials = _load_exact_trials(paths)
-    model = train_live_motion_model(all_trials)
+    model = train_live_motion_model(
+        all_trials,
+        fixed_num_samples=args.fixed_num_samples,
+    )
     window_frames = args.window_frames
     min_frames = args.min_frames or window_frames
 
@@ -480,6 +492,7 @@ def main() -> None:
     for trial in selected_trials:
         print(f"  {trial.trial_name}: {trial.label}, {trial.metadata.num_frames} frames")
     print(f"Rolling window frames: {window_frames}")
+    print(f"Padded fPCA samples: {model.fixed_num_samples}")
     print(f"Prediction stride: {args.prediction_stride}")
     print(f"Minimum frames before prediction: {min_frames}")
     print(f"Stable predictions for event: {args.stable_predictions}")

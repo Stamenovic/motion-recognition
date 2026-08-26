@@ -1,6 +1,7 @@
 """Trainable models for segment-based live motion recognition."""
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import joblib
 import numpy as np
@@ -16,7 +17,6 @@ from .feature_extraction import (
     extract_trial_features,
 )
 from .preprocessing import filter_trial_translations
-from .temporal_normalization import normalize_trial_features
 
 
 UNKNOWN_LABEL = "Nepoznato"
@@ -42,11 +42,11 @@ class PredictionResult:
 
 @dataclass
 class LiveMotionModel:
-    """Serializable fPCA/SVM model bundle."""
+    """Serializable padded fPCA/SVM model bundle."""
 
     cutoff_hz: float
     filter_order: int
-    normalized_num_samples: int
+    fixed_num_samples: int
     fpca_components: int
     signal_names: list[str]
     signal_means: dict[str, float]
@@ -67,7 +67,13 @@ class LiveMotionModel:
     @classmethod
     def load(cls, model_path: Path) -> "LiveMotionModel":
         """Load a persisted model bundle."""
-        return joblib.load(model_path)
+        model = joblib.load(model_path)
+        if not hasattr(model, "fixed_num_samples"):
+            raise ValueError(
+                "Saved live model was trained with temporal normalization. "
+                "Retrain it with scripts/train_live_models.py on this branch."
+            )
+        return model
 
     def predict_trial(self, trial: TrialRecord) -> PredictionResult:
         """Predict a completed movement segment."""
@@ -92,15 +98,15 @@ class LiveMotionModel:
 
     def trial_to_fpca_row(self, trial: TrialRecord) -> np.ndarray:
         """Convert one trial to one fPCA score row."""
-        normalized = _preprocess_and_normalize_trial(
+        padded = _preprocess_and_pad_trial(
             trial,
             cutoff_hz=self.cutoff_hz,
             order=self.filter_order,
-            num_samples=self.normalized_num_samples,
+            num_samples=self.fixed_num_samples,
         )
         row = []
         for signal_name in self.signal_names:
-            signal = normalized.signals[signal_name]
+            signal = padded.signals[signal_name]
             mean = self.signal_means[signal_name]
             std = self.signal_stds[signal_name]
             if std == 0.0:
@@ -118,30 +124,31 @@ def train_live_motion_model(
     trials: list[TrialRecord],
     cutoff_hz: float = 10.0,
     filter_order: int = 2,
-    normalized_num_samples: int = 101,
+    fixed_num_samples: Optional[int] = None,
     fpca_components: int = 3,
     unknown_label: str = UNKNOWN_LABEL,
 ) -> LiveMotionModel:
-    """Train an fPCA/SVM model for completed live segments."""
+    """Train an fPCA/SVM model using fixed-length padded live segments."""
     if len(trials) < 2:
         raise ValueError("At least two trials are required to train the model.")
 
-    normalized_trials = [
-        _preprocess_and_normalize_trial(
+    resolved_num_samples = _resolve_fixed_num_samples(trials, fixed_num_samples)
+    padded_trials = [
+        _preprocess_and_pad_trial(
             trial,
             cutoff_hz=cutoff_hz,
             order=filter_order,
-            num_samples=normalized_num_samples,
+            num_samples=resolved_num_samples,
         )
         for trial in trials
     ]
-    signal_names = sorted(normalized_trials[0].signals)
+    signal_names = sorted(padded_trials[0].signals)
     signal_means, signal_stds = _fit_signal_standardization(
-        normalized_trials,
+        padded_trials,
         signal_names,
     )
-    fpca_grid = _normalized_trials_to_standardized_fd_grid(
-        normalized_trials,
+    fpca_grid = _fixed_length_trials_to_standardized_fd_grid(
+        padded_trials,
         signal_names,
         signal_means,
         signal_stds,
@@ -168,7 +175,7 @@ def train_live_motion_model(
     return LiveMotionModel(
         cutoff_hz=cutoff_hz,
         filter_order=filter_order,
-        normalized_num_samples=normalized_num_samples,
+        fixed_num_samples=resolved_num_samples,
         fpca_components=max_components,
         signal_names=signal_names,
         signal_means=signal_means,
@@ -209,7 +216,7 @@ def _trial_motion_extent_mm(trial: TrialRecord) -> float:
     return max(extents, default=0.0)
 
 
-def _preprocess_and_normalize_trial(
+def _preprocess_and_pad_trial(
     trial: TrialRecord,
     cutoff_hz: float,
     order: int,
@@ -217,7 +224,49 @@ def _preprocess_and_normalize_trial(
 ):
     filtered = filter_trial_translations(trial, cutoff_hz=cutoff_hz, order=order)
     features = extract_trial_features(filtered)
-    return normalize_trial_features(features, num_samples=num_samples)
+    return _pad_trial_features(features, num_samples=num_samples)
+
+
+def _resolve_fixed_num_samples(
+    trials: list[TrialRecord],
+    requested_num_samples: Optional[int],
+) -> int:
+    if requested_num_samples is not None:
+        if requested_num_samples < 1:
+            raise ValueError("fixed_num_samples must be a positive integer.")
+        return requested_num_samples
+    return max(trial.metadata.num_frames for trial in trials)
+
+
+def _pad_trial_features(features, num_samples: int):
+    """Keep original sample spacing, then pad or truncate signals to a fixed length."""
+    padded_signals = {
+        name: _pad_signal(signal, num_samples)
+        for name, signal in features.signals.items()
+    }
+    return type(features)(
+        trial_name=features.trial_name,
+        label=features.label,
+        time=np.arange(num_samples, dtype=float) * _infer_dt(features.time),
+        signals=padded_signals,
+    )
+
+
+def _pad_signal(signal: np.ndarray, num_samples: int) -> np.ndarray:
+    """Return a fixed-length copy padded with the final observed value."""
+    signal = np.asarray(signal, dtype=float)
+    if len(signal) >= num_samples:
+        return signal[:num_samples]
+    if len(signal) == 0:
+        return np.zeros(num_samples, dtype=float)
+    padding = np.full(num_samples - len(signal), signal[-1], dtype=float)
+    return np.concatenate([signal, padding])
+
+
+def _infer_dt(time: np.ndarray) -> float:
+    if len(time) < 2:
+        return 0.0
+    return float(np.median(np.diff(time)))
 
 
 def _fit_signal_standardization(normalized_trials, signal_names):
@@ -233,14 +282,14 @@ def _fit_signal_standardization(normalized_trials, signal_names):
     return means, stds
 
 
-def _normalized_trials_to_standardized_fd_grid(
-    normalized_trials,
+def _fixed_length_trials_to_standardized_fd_grid(
+    fixed_length_trials,
     signal_names,
     means,
     stds,
 ) -> FDataGrid:
     rows = []
-    for trial in normalized_trials:
+    for trial in fixed_length_trials:
         parts = []
         for signal_name in signal_names:
             signal = trial.signals[signal_name]

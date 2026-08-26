@@ -144,6 +144,12 @@ This writes `models\live_motion_model.joblib`. The capture server also trains a
 fresh model from `data\raw` at startup by default; this manual step is useful
 when you want to refresh and inspect the model before live capture.
 
+On `feat/live2`, this live model does not time-normalize each trial. It keeps
+the original sample spacing and pads shorter completed segments with their
+final value so all fPCA rows have the same length. If you do not pass
+`--fixed-num-samples`, training uses the longest valid recording as that fixed
+length.
+
 Check the printed `Loaded trials:` count against the number of CSVs you expect.
 A lower number means some files were skipped by the naming rule above.
 
@@ -182,6 +188,8 @@ recording when hand displacement passes 80 mm or hand speed passes 150 mm/s.
 It stops when hand speed stays below 200 mm/s for 30 frames, or when the segment
 reaches 1000 frames. Segments shorter than 280 frames are not classified. After
 classification it clears the buffer and waits through a 100-frame cooldown.
+Padding is applied only after this stop condition closes the segment; the
+active stream is not padded frame by frame.
 
 Terminal A prints:
 
@@ -258,6 +266,7 @@ because the recorded trials end in the extended pose.
 | `--stop-quiet-frames` | `30` | Stop recording after this many quiet frames. |
 | `--min-frames` | `280` | Do not classify triggered segments shorter than this. |
 | `--max-segment-frames` | `1000` | Force classification when a segment reaches this length. |
+| `--fixed-num-samples` | longest training recording | fPCA length used for padding/truncation when training at startup. |
 | `--cooldown-frames` | `100` | Ignore this many complete frames after a segment is classified. |
 | `--probe` | off | Print parsed frames, do not load the model. |
 

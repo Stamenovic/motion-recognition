@@ -133,6 +133,15 @@ def parse_args() -> argparse.Namespace:
         help="Force classification when the active segment reaches this length.",
     )
     parser.add_argument(
+        "--fixed-num-samples",
+        type=int,
+        default=None,
+        help=(
+            "Samples used by padded fPCA when training at startup. "
+            "Defaults to the longest valid training recording."
+        ),
+    )
+    parser.add_argument(
         "--probe",
         action="store_true",
         help="Print parsed packets and exit without loading the model. "
@@ -152,7 +161,10 @@ def load_or_train_model(args) -> LiveMotionModel:
 
     print(f"Training test model on all available trials: {len(trials)}")
     print(f"Training labels: {dict(sorted(Counter(trial.label for trial in trials).items()))}")
-    model = train_live_motion_model(trials)
+    model = train_live_motion_model(
+        trials,
+        fixed_num_samples=args.fixed_num_samples,
+    )
     model.save(args.model_path)
     print(f"Saved refreshed model: {args.model_path}")
     return model
@@ -408,6 +420,7 @@ def main() -> None:
         print(f"Model: {args.model_path} (labels: {model.labels})")
         print(f"Unknown label: {model.unknown_label} (threshold={model.unknown_threshold:.3f})")
         print(f"Minimum motion for known label: {model.minimum_motion_extent_mm:.1f} mm")
+        print(f"Fixed padded samples: {model.fixed_num_samples}")
         print(f"Required segments: {list(REQUIRED_SEGMENTS)}")
         print(f"Baseline frames: {args.baseline_frames}")
         print(f"Start delta: {args.start_delta_mm:.1f} mm")
