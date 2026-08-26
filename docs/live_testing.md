@@ -186,6 +186,7 @@ classification it clears the buffer and waits through a 100-frame cooldown.
 Terminal A prints:
 
 ```text
+Model kind: statistical
 Baseline frames: 50
 Start delta: 80.0 mm
 Start speed: 150.0 mm/s
@@ -264,7 +265,7 @@ because the recorded trials end in the extended pose.
 Keys: **Q** or Ctrl+C to quit. SPACE is ignored in trigger mode.
 
 The live model reports both the final label and the best known-class candidate.
-For example, `fPCA=Nepoznato, candidate=guranje` means the SVM's closest known
+For example, `label=Nepoznato, candidate=guranje` means the SVM's closest known
 class was `guranje`, but the confidence or movement amount was below the
 accepted threshold.
 

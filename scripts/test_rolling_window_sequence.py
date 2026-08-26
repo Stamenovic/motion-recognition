@@ -16,7 +16,7 @@ from config import RAW_DATA_DIR
 from src.data_loader import load_trials
 from src.feature_extraction import LEFT_SEGMENT, RIGHT_SEGMENT, TRUNK_SEGMENT
 from src.live_capture import LiveFrame, LiveSegmentBuffer
-from src.live_model import train_live_motion_model
+from src.live_model import train_live_statistical_model
 
 
 REQUIRED_SEGMENTS = (LEFT_SEGMENT, RIGHT_SEGMENT, TRUNK_SEGMENT)
@@ -404,7 +404,7 @@ def main() -> None:
     args = parse_args()
     paths = args.trial_path if args.trial_path else DEFAULT_TRIAL_PATHS
     all_trials, selected_trials = _load_exact_trials(paths)
-    model = train_live_motion_model(all_trials)
+    model = train_live_statistical_model(all_trials)
     window_frames = args.window_frames
     min_frames = args.min_frames or window_frames
 
@@ -477,6 +477,7 @@ def main() -> None:
             cooldown_until = trial.metadata.frame_end + args.cooldown_frames
 
     print(f"Selected trials: {len(selected_trials)}")
+    print("Model kind: statistical")
     for trial in selected_trials:
         print(f"  {trial.trial_name}: {trial.label}, {trial.metadata.num_frames} frames")
     print(f"Rolling window frames: {window_frames}")

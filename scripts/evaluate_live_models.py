@@ -14,7 +14,10 @@ os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".matplotlib-cache"))
 
 from config import RAW_DATA_DIR
 from src.data_loader import load_trials
-from src.live_model import UNKNOWN_LABEL, train_live_motion_model
+from src.live_model import (
+    UNKNOWN_LABEL,
+    train_live_statistical_model,
+)
 
 
 def main() -> None:
@@ -23,23 +26,29 @@ def main() -> None:
         raise RuntimeError("At least two trials are required for Leave-One-Out.")
 
     y_true = []
-    fpca_predictions = []
+    statistical_predictions = []
     trial_names = []
 
     for train_idx, test_idx in LeaveOneOut().split(np.arange(len(trials))):
         train_trials = [trials[index] for index in train_idx]
         test_trial = trials[test_idx[0]]
-        model = train_live_motion_model(train_trials)
-        result = model.predict_trial(test_trial)
 
         trial_names.append(test_trial.trial_name)
         y_true.append(test_trial.label)
-        fpca_predictions.append(result.fpca_prediction)
+        statistical_model = train_live_statistical_model(train_trials)
+        statistical_result = statistical_model.predict_trial(test_trial)
+        statistical_predictions.append(statistical_result.fpca_prediction)
 
-    labels = sorted(set(y_true) | set(fpca_predictions) | {UNKNOWN_LABEL})
+    labels = sorted(set(y_true) | set(statistical_predictions) | {UNKNOWN_LABEL})
     print("Live-ready Leave-One-Out evaluation")
     print()
-    _print_result("fPCA + SVM", y_true, fpca_predictions, labels, trial_names)
+    _print_result(
+        "Statistical SVM without temporal normalization",
+        y_true,
+        statistical_predictions,
+        labels,
+        trial_names,
+    )
 
 
 def _print_result(name, y_true, y_pred, labels, trial_names) -> None:

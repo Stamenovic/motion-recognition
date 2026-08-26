@@ -16,6 +16,7 @@ from .feature_extraction import (
     extract_trial_features,
 )
 from .preprocessing import filter_trial_translations
+from .statistical_features import extract_statistical_features
 from .temporal_normalization import normalize_trial_features
 
 
@@ -114,6 +115,66 @@ class LiveMotionModel:
         )
         return np.asarray(self.fpca.transform(fd_grid), dtype=float)
 
+
+@dataclass
+class StatisticalLiveMotionModel:
+    """Serializable SVM model using variable-length statistical features."""
+
+    cutoff_hz: float
+    filter_order: int
+    feature_names: list[str]
+    statistical_svm: object
+    unknown_threshold: float
+    minimum_motion_extent_mm: float
+    unknown_label: str
+    labels: list[str]
+
+    def save(self, output_path: Path) -> Path:
+        """Persist the model bundle to disk."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self, output_path)
+        return output_path
+
+    @classmethod
+    def load(cls, model_path: Path) -> "StatisticalLiveMotionModel":
+        """Load a persisted model bundle."""
+        return joblib.load(model_path)
+
+    def predict_trial(self, trial: TrialRecord) -> PredictionResult:
+        """Predict a completed movement segment from scalar statistics."""
+        statistical_row = self.trial_to_statistical_row(trial)
+        known_prediction = str(self.statistical_svm.predict(statistical_row)[0])
+        confidence = _prediction_confidence(self.statistical_svm, statistical_row)
+        motion_extent = _trial_motion_extent_mm(trial)
+        is_unknown = (
+            confidence < self.unknown_threshold
+            or motion_extent < self.minimum_motion_extent_mm
+        )
+        prediction = self.unknown_label if is_unknown else known_prediction
+        return PredictionResult(
+            fpca_prediction=prediction,
+            known_prediction=known_prediction,
+            fpca_confidence=confidence,
+            unknown_threshold=self.unknown_threshold,
+            motion_extent_mm=motion_extent,
+            minimum_motion_extent_mm=self.minimum_motion_extent_mm,
+            is_unknown=is_unknown,
+        )
+
+    def trial_to_statistical_row(self, trial: TrialRecord) -> np.ndarray:
+        """Convert one trial to one no-temporal-normalization feature row."""
+        features = _preprocess_and_extract_features(
+            trial,
+            cutoff_hz=self.cutoff_hz,
+            order=self.filter_order,
+        )
+        statistical = extract_statistical_features(features)
+        return np.asarray(
+            [[statistical.values[name] for name in self.feature_names]],
+            dtype=float,
+        )
+
+
 def train_live_motion_model(
     trials: list[TrialRecord],
     cutoff_hz: float = 10.0,
@@ -182,6 +243,62 @@ def train_live_motion_model(
     )
 
 
+def train_live_statistical_model(
+    trials: list[TrialRecord],
+    cutoff_hz: float = 10.0,
+    filter_order: int = 2,
+    unknown_label: str = UNKNOWN_LABEL,
+) -> StatisticalLiveMotionModel:
+    """Train an SVM model without temporal normalization."""
+    if len(trials) < 2:
+        raise ValueError("At least two trials are required to train the model.")
+
+    statistical_trials = [
+        extract_statistical_features(
+            _preprocess_and_extract_features(
+                trial,
+                cutoff_hz=cutoff_hz,
+                order=filter_order,
+            )
+        )
+        for trial in trials
+    ]
+    feature_names = sorted(statistical_trials[0].values)
+    rows = np.asarray(
+        [
+            [trial.values[feature_name] for feature_name in feature_names]
+            for trial in statistical_trials
+        ],
+        dtype=float,
+    )
+    labels = np.array([trial.label for trial in trials])
+    statistical_svm = make_svm_pipeline()
+    statistical_svm.fit(rows, labels)
+    training_confidences = _prediction_confidences(statistical_svm, rows)
+    unknown_threshold = float(
+        np.quantile(training_confidences, UNKNOWN_THRESHOLD_QUANTILE)
+        * UNKNOWN_THRESHOLD_SCALE
+    )
+    motion_extents = np.asarray(
+        [_trial_motion_extent_mm(trial) for trial in trials],
+        dtype=float,
+    )
+    minimum_motion_extent_mm = float(
+        np.quantile(motion_extents, MIN_MOTION_QUANTILE) * MIN_MOTION_SCALE
+    )
+
+    return StatisticalLiveMotionModel(
+        cutoff_hz=cutoff_hz,
+        filter_order=filter_order,
+        feature_names=feature_names,
+        statistical_svm=statistical_svm,
+        unknown_threshold=unknown_threshold,
+        minimum_motion_extent_mm=minimum_motion_extent_mm,
+        unknown_label=unknown_label,
+        labels=sorted(str(label) for label in set(labels)),
+    )
+
+
 def _prediction_confidence(model, rows: np.ndarray) -> float:
     """Return confidence for one row as the best SVM decision score."""
     return float(_prediction_confidences(model, rows)[0])
@@ -215,9 +332,17 @@ def _preprocess_and_normalize_trial(
     order: int,
     num_samples: int,
 ):
-    filtered = filter_trial_translations(trial, cutoff_hz=cutoff_hz, order=order)
-    features = extract_trial_features(filtered)
+    features = _preprocess_and_extract_features(trial, cutoff_hz=cutoff_hz, order=order)
     return normalize_trial_features(features, num_samples=num_samples)
+
+
+def _preprocess_and_extract_features(
+    trial: TrialRecord,
+    cutoff_hz: float,
+    order: int,
+):
+    filtered = filter_trial_translations(trial, cutoff_hz=cutoff_hz, order=order)
+    return extract_trial_features(filtered)
 
 
 def _fit_signal_standardization(normalized_trials, signal_names):

@@ -14,7 +14,10 @@ This branch prepares the post-capture part of a Vicon live recognition workflow.
 
 ## Current model choice
 
-The prediction is `fPCA + linear SVM`.
+The prediction is `statistical features + linear SVM`, without temporal
+normalization. The triggered segment keeps its original duration; the model uses
+scalar summaries of the extracted signals instead of resampling each movement to
+a fixed number of time samples.
 
 The live server now uses automatic trigger segmentation instead of manual SPACE
 segmentation. That means it waits for the shared starting pose, detects movement
@@ -147,7 +150,7 @@ To reuse an already saved model instead of retraining at startup:
 ```
 
 This retrains the live-ready model on each Leave-One-Out split and reports the
-fPCA/SVM prediction.
+statistical SVM prediction.
 
 ## Simulate a completed live segment
 

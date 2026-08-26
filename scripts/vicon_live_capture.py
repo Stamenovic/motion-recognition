@@ -30,7 +30,10 @@ from config import MODELS_DIR, RAW_DATA_DIR
 from src.data_loader import load_trials
 from src.feature_extraction import LEFT_SEGMENT, RIGHT_SEGMENT, TRUNK_SEGMENT
 from src.live_capture import LiveFrame, LiveSegmentBuffer
-from src.live_model import LiveMotionModel, train_live_motion_model
+from src.live_model import (
+    StatisticalLiveMotionModel,
+    train_live_statistical_model,
+)
 
 try:
     import msvcrt
@@ -141,10 +144,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_or_train_model(args) -> LiveMotionModel:
+def load_or_train_model(args):
     """Train on all available CSV trials for testing, or load a saved model."""
     if args.use_saved_model:
-        return LiveMotionModel.load(args.model_path)
+        return StatisticalLiveMotionModel.load(args.model_path)
 
     trials = load_trials(RAW_DATA_DIR)
     if not trials:
@@ -152,7 +155,7 @@ def load_or_train_model(args) -> LiveMotionModel:
 
     print(f"Training test model on all available trials: {len(trials)}")
     print(f"Training labels: {dict(sorted(Counter(trial.label for trial in trials).items()))}")
-    model = train_live_motion_model(trials)
+    model = train_live_statistical_model(trials)
     model.save(args.model_path)
     print(f"Saved refreshed model: {args.model_path}")
     return model
@@ -405,6 +408,7 @@ def main() -> None:
             return
 
         model = load_or_train_model(args)
+        print("Model kind: statistical")
         print(f"Model: {args.model_path} (labels: {model.labels})")
         print(f"Unknown label: {model.unknown_label} (threshold={model.unknown_threshold:.3f})")
         print(f"Minimum motion for known label: {model.minimum_motion_extent_mm:.1f} mm")

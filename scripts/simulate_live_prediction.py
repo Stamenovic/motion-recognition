@@ -11,7 +11,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".matplotlib-cache"))
 
 from config import MODELS_DIR, RAW_DATA_DIR
 from src.data_loader import load_trials
-from src.live_model import LiveMotionModel
+from src.live_model import StatisticalLiveMotionModel
 
 
 DEFAULT_MODEL_PATH = MODELS_DIR / "live_motion_model.joblib"
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    model = LiveMotionModel.load(args.model_path)
+    model = StatisticalLiveMotionModel.load(args.model_path)
     trials = load_trials(RAW_DATA_DIR)
     trial_by_name = {trial.trial_name: trial for trial in trials}
     if args.trial not in trial_by_name:
@@ -45,7 +45,7 @@ def main() -> None:
     result = model.predict_trial(trial)
     print(f"Trial: {trial.trial_name}")
     print(f"True label: {trial.label}")
-    print(f"fPCA + SVM prediction: {result.fpca_prediction}")
+    print(f"Statistical SVM without temporal normalization prediction: {result.fpca_prediction}")
     print(f"Known-class candidate: {result.known_prediction}")
     print(f"Confidence: {result.fpca_confidence:.3f}")
     print(f"Unknown threshold: {result.unknown_threshold:.3f}")
