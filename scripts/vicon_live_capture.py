@@ -61,7 +61,7 @@ DEFAULT_START_SPEED_MM_S = 150.0
 DEFAULT_STOP_SPEED_MM_S = 200.0
 DEFAULT_STOP_QUIET_FRAMES = 30
 DEFAULT_MAX_SEGMENT_FRAMES = 1000
-DEFAULT_TRANSLATION_LOG_EVERY_SEC = 0.5
+DEFAULT_TRANSLATION_LOG_EVERY_SEC = 0.0
 
 # Vicon streams bare object names; the trained model expects the CSV export
 # names ("Subject:Segment"). Adjust the left side to match your Nexus objects.
@@ -165,7 +165,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_TRANSLATION_LOG_EVERY_SEC,
         help="Print current Left, Right, and Trup translations this often. "
-        "Use 0 to disable translation logging.",
+        "Default 0 disables translation logging.",
     )
     parser.add_argument(
         "--allow-missing-trup",
@@ -936,12 +936,7 @@ def main() -> None:
                                 f"but skipped {skipped_frames} incomplete frame(s). "
                                 f"Need segments: {list(stream_required_segments)}."
                             )
-                        elif recording:
-                            print(
-                                f"Recording movement: {len(buffer.frames)} frame(s), "
-                                f"quiet={quiet_count}/{args.stop_quiet_frames}."
-                            )
-                        else:
+                        elif not recording:
                             print(
                                 f"Ready: parsed {stream_stats['parsed_frames']} complete frame(s). "
                                 "Move past the start threshold to trigger classification."
