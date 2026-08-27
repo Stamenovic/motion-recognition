@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 os.environ.setdefault("MPLCONFIGDIR", str(PROJECT_ROOT / ".matplotlib-cache"))
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 from config import PLOTS_DIR, RAW_DATA_DIR, create_project_directories
 from src.data_loader import load_trials
@@ -177,8 +178,8 @@ def plot_confusion(rows: list[PredictionRow], title: str, file_name: str) -> Pat
 def plot_fpca_scores(rows: list[PredictionRow]) -> Path:
     """Plot fPC1/fPC2 positions for train, held-out and Lazar trials."""
     fig, axis = plt.subplots(figsize=(8, 6))
-    for split_name, marker in SPLIT_MARKERS.items():
-        for label in CLASS_LABELS:
+    for label in CLASS_LABELS:
+        for split_name, marker in SPLIT_MARKERS.items():
             selected = [
                 row
                 for row in rows
@@ -196,7 +197,6 @@ def plot_fpca_scores(rows: list[PredictionRow]) -> Path:
                 edgecolor="black" if split_name != "train" else "none",
                 linewidth=0.8,
                 alpha=0.82,
-                label=f"{split_name}: {label}",
             )
 
     for row in rows:
@@ -214,7 +214,49 @@ def plot_fpca_scores(rows: list[PredictionRow]) -> Path:
     axis.set_xlabel("fPC1 score")
     axis.set_ylabel("fPC2 score")
     axis.grid(alpha=0.25)
-    axis.legend(loc="best", fontsize=7, ncols=2)
+
+    class_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="none",
+            markerfacecolor=CLASS_COLORS[label],
+            markeredgecolor="none",
+            markersize=8,
+            label=label,
+        )
+        for label in CLASS_LABELS
+    ]
+    split_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker=marker,
+            color="black",
+            markerfacecolor="white",
+            markeredgecolor="black",
+            markersize=8,
+            linestyle="none",
+            label=split_name,
+        )
+        for split_name, marker in SPLIT_MARKERS.items()
+    ]
+    first_legend = axis.legend(
+        handles=class_handles,
+        title="Klasa",
+        loc="upper left",
+        fontsize=8,
+        title_fontsize=8,
+    )
+    axis.add_artist(first_legend)
+    axis.legend(
+        handles=split_handles,
+        title="Skup",
+        loc="upper center",
+        fontsize=8,
+        title_fontsize=8,
+    )
     return finish(fig, OUTPUT_DIR / "04_fpca_score_space_generalization.png")
 
 

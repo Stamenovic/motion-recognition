@@ -28,7 +28,7 @@ The live server now uses automatic trigger segmentation instead of manual SPACE
 segmentation. That means it waits for the shared starting pose, detects movement
 start/stop, then classifies the completed segment.
 
-The live prediction can also return `Nepoznato`. This is a reject label, not a
+The live prediction can also return `nepoznato`. This is a reject label, not a
 trained movement class. It is used when the best known-class SVM confidence is
 too low or when the captured segment contains too little movement to be treated
 as one of the trained actions.

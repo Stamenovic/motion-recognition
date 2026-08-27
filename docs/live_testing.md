@@ -209,10 +209,10 @@ If the triggered segment does not look confident enough, or if there is too
 little movement in it, the final prediction becomes:
 
 ```text
-Detected movement 2: label=Nepoznato, frames=280, range=3400-3679, candidate=guranje, confidence=2.225, motion=0.0 mm, reason=quiet
+Detected movement 2: label=nepoznato, frames=280, range=3400-3679, candidate=guranje, confidence=2.225, motion=0.0 mm, reason=quiet
 ```
 
-`Nepoznato` is not trained as a fourth movement class. It is a reject label used
+`nepoznato` is not trained as a fourth movement class. It is a reject label used
 when the model should avoid forcing the segment into `guranje`,
 `podizanje_desna`, or `sirenje`.
 
@@ -273,7 +273,7 @@ because the recorded trials end in the extended pose.
 Keys: **Q** or Ctrl+C to quit. SPACE is ignored in trigger mode.
 
 The live model reports both the final label and the best known-class candidate.
-For example, `fPCA=Nepoznato, candidate=guranje` means the SVM's closest known
+For example, `fPCA=nepoznato, candidate=guranje` means the SVM's closest known
 class was `guranje`, but the confidence or movement amount was below the
 accepted threshold.
 
@@ -304,7 +304,7 @@ inbound rule for `python.exe`.
 | `Loaded trials:` lower than expected | Some files failed the naming rule | Run the check in Step 3 |
 | `FileNotFoundError: live_motion_model.joblib` | `--use-saved-model` was used before training | Run Step 4 or start without `--use-saved-model` |
 | No detected movement yet | Baseline is still forming, trigger thresholds are not crossed, or packets are incomplete | Check the sender is running; use `--probe` to inspect incoming frames |
-| Prediction is `Nepoznato` | Low SVM confidence, too little movement, or a movement outside the known classes | Inspect confidence, motion thresholds, and whether the window contains the movement |
+| Prediction is `nepoznato` | Low SVM confidence, too little movement, or a movement outside the known classes | Inspect confidence, motion thresholds, and whether the window contains the movement |
 | Always predicts the same class | Segment boundaries are poor, or `--fps` does not match the CSVs (200 Hz) | Tune trigger thresholds and check `--fps` on both scripts |
 | Live and simulated predictions disagree | Model is fine, the captured segment is not | Run `simulate_live_prediction.py` on a real trial to confirm the model |
 | `Skipped N incomplete frames` | Frames missing a required object | Expected with `--drop-rate`; with real Vicon it means occlusion |
